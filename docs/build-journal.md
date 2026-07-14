@@ -240,3 +240,135 @@ This distinction will become the foundation of the entire AI Visibility Engineer
 
 
 **"Up to this point, you've built real production infrastructure"**
+
+---
+
+# Milestone 2 — Verified Foundation Review
+
+### Objective
+
+Continue from checkpoint `354df4c` without discarding working behavior.
+
+### Accomplishments
+
+* Read the repository, tests, documentation, attached master specification, and complete Git history.
+* Confirmed the worktree matched the checkpoint before implementation.
+* Ran the checkpoint suite: 3 test files and 18 tests passed.
+* Ran the strict TypeScript build successfully.
+* Restored dependency declarations in `package.json` from the versions already locked in `package-lock.json`.
+
+### Engineering principle
+
+Preserve verified behavior and extend it through focused, reviewable changes.
+
+---
+
+# Milestone 3 — Hardened Public-Page Acquisition
+
+### Objective
+
+Make every outbound request deterministic, bounded, and subject to the same public-network policy.
+
+### Accomplishments
+
+* Added stable crawler error codes and safe API mappings.
+* Rejected loopback, private, link-local, reserved, multicast, and mixed public/private DNS targets.
+* Revalidated every redirect hop and recorded redirect/network evidence.
+* Enforced a 10-second end-to-end deadline, five-hop redirect limit, and 2,000,000-byte HTML limit.
+* Routed HTML, `robots.txt`, and `sitemap.xml` through the shared request policy.
+* Added injectable DNS/fetch seams so tests remain offline and repeatable.
+
+### Commit
+
+`58d9885 feat: harden crawler request policy`
+
+---
+
+# Milestone 4 — Comparison Contracts, Persistence, and History
+
+### Objective
+
+Create typed comparison/history boundaries and durable local run storage before wiring the complete analyzer.
+
+### Accomplishments
+
+* Added the normalized comparison, historical diff, ranking, finding, and storage contracts.
+* Added raw matrix projections and evidence-backed gap/advantage boundaries.
+* Accepted optional normalized manual rank observations from 1 through 1,000 and defined a future provider interface without implementing one.
+* Added a runtime-validated JSON store with serialized writes, temporary-file cleanup, and atomic replacement.
+* Matched historical runs by normalized target URL and established technical/content/finding/competitor/rank change contracts.
+
+### Commit
+
+`74958ac feat: add comparison history and run storage`
+
+---
+
+# Milestone 5 — Evidence, Rules, Analyzer Integration, and Audit
+
+### Objective
+
+Expand observable evidence, generate explainable guidance, wire the complete API flow, and close final evidence-audit gaps.
+
+### Accomplishments
+
+* Added canonical raw/resolved relationship evidence, robots/indexability interpretation, language, viewport, complete heading structure, visible-text counts, questions, FAQs, direct answers, and breadcrumbs.
+* Preserved raw JSON-LD and parse failures, schema types, social metadata, link destinations/domains/anchors, and image/alt evidence.
+* Added inspectable entity, service, location, trust, contact, and content-section coverage signals.
+* Added 34 stable deterministic rules and original/corrected verification fixtures.
+* Exposed the analyzer, comparison, persistence, and history flows through strict safe APIs.
+* Completed the 43-metric matrix, structured scalar/boolean deltas, expanded historical inventory, schema normalization, multi-competitor benchmark tests, and no-causation safeguards.
+
+### Commits
+
+* `8360a8e feat: expose evidence rules and analyzer APIs`
+* `00f35e3 fix: close final evidence audit gaps`
+
+---
+
+# Milestone 6 — Minimal Evidence Interface
+
+### Objective
+
+Make the complete deterministic workflow usable without moving analysis logic into the browser.
+
+### Accomplishments
+
+* Added single-site, competitor-comparison, and run-history workflows.
+* Added progress and error states, summary cards, metric tables, findings, raw evidence details, comparison gaps/advantages, limitations, and historical changes.
+* Verified a live analysis against `https://425clearaligners.com` and a comparison against `https://example.com`.
+* Saved a second matching run, rendered the historical diff, listed both runs, and reopened the newest saved record.
+* Confirmed the browser console contained no warnings or errors during the verified workflow.
+* Corrected optional competitor-slot rank pairing found during the final audit.
+
+### Commit
+
+`8ceb833 feat: add minimal analysis interface`
+
+---
+
+# Milestone 7 — Final Verification and Handoff
+
+### Objective
+
+Leave a reproducible, inspectable MVP and an exact map for the next engineer.
+
+### Verification gate
+
+* `npm test`: 16 test files passed; 83 tests passed after final regression additions.
+* `npm run build`: strict TypeScript compilation passed.
+* `npm run dev`: local service startup and `GET /health` were verified.
+* Live browser workflow: analysis, comparison, persistence, historical diff, run listing, and saved-run reopening passed with no console warnings/errors.
+* `git diff --check`: passed.
+
+### Handoff documents
+
+* `README.md`
+* `docs/architecture.md`
+* `docs/api.md`
+* `docs/methodology.md`
+* `docs/decision-log.md`
+* `docs/file-map.md`
+* `docs/change-report.md`
+
+The deterministic MVP remains intentionally bounded: one submitted page per site, public evidence only, no automatic rank provider, no private analytics, no AI API, no aggregate visibility score, and no causation claims.
