@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AI Visibility Engineering Lab</title>
+    <meta name="description" content="Deterministic public-page evidence, comparison, and change verification." />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <div>
+        <p class="eyebrow">Deterministic evidence lab</p>
+        <h1>AI Visibility Engineering Lab</h1>
+        <p class="lede">Observe public-page signals, compare sites, and verify changes—without a hidden score or ranking prediction.</p>
+      </div>
+      <div class="status" id="health-status" aria-live="polite">Checking service…</div>
+    </header>
+
+    <main>
+      <nav class="tabs" aria-label="Workflows">
+        <button class="tab active" type="button" data-panel="analyze-panel">Single-site analysis</button>
+        <button class="tab" type="button" data-panel="compare-panel">Competitor comparison</button>
+        <button class="tab" type="button" data-panel="history-panel">Run history</button>
+      </nav>
+
+      <section id="analyze-panel" class="panel active" aria-labelledby="analyze-heading">
+        <div class="panel-heading">
+          <div>
+            <p class="step">Observe → Measure → Analyze</p>
+            <h2 id="analyze-heading">Analyze one public page</h2>
+          </div>
+          <p>Fetches and inspects the submitted page plus its public robots and sitemap resources.</p>
+        </div>
+        <form id="analyze-form" class="form-grid">
+          <label class="wide">Public page URL
+            <input name="url" type="url" value="https://425clearaligners.com" maxlength="2048" required />
+          </label>
+          <button type="submit">Run analysis</button>
+          <span class="progress" role="status" aria-live="polite"></span>
+        </form>
+        <div id="analyze-error" class="error" role="alert" hidden></div>
+        <div id="analyze-results" class="results" aria-live="polite"></div>
+      </section>
+
+      <section id="compare-panel" class="panel" aria-labelledby="compare-heading" hidden>
+        <div class="panel-heading">
+          <div>
+            <p class="step">Compare → Save → Monitor</p>
+            <h2 id="compare-heading">Compare a target with competitors</h2>
+          </div>
+          <p>Every site follows the same analyzer path. Rank fields are optional manual observations.</p>
+        </div>
+        <form id="compare-form" class="form-grid comparison-form">
+          <fieldset>
+            <legend>Target</legend>
+            <label>Target URL
+              <input name="targetUrl" type="url" value="https://425clearaligners.com" maxlength="2048" required />
+            </label>
+            <label>Manual observed rank (optional)
+              <input name="targetRank" type="number" min="1" max="1000" inputmode="numeric" />
+            </label>
+          </fieldset>
+          <fieldset>
+            <legend>Competitor 1</legend>
+            <label>Competitor URL
+              <input name="competitorUrl1" type="url" maxlength="2048" required />
+            </label>
+            <label>Manual observed rank (optional)
+              <input name="competitorRank1" type="number" min="1" max="1000" inputmode="numeric" />
+            </label>
+          </fieldset>
+          <fieldset>
+            <legend>Competitor 2 (optional)</legend>
+            <label>Competitor URL
+              <input name="competitorUrl2" type="url" maxlength="2048" />
+            </label>
+            <label>Manual observed rank (optional)
+              <input name="competitorRank2" type="number" min="1" max="1000" inputmode="numeric" />
+            </label>
+          </fieldset>
+          <fieldset>
+            <legend>Competitor 3 (optional)</legend>
+            <label>Competitor URL
+              <input name="competitorUrl3" type="url" maxlength="2048" />
+            </label>
+            <label>Manual observed rank (optional)
+              <input name="competitorRank3" type="number" min="1" max="1000" inputmode="numeric" />
+            </label>
+          </fieldset>
+          <label class="wide">Query label (optional context; no rank lookup is performed)
+            <input name="queryLabel" type="text" maxlength="200" placeholder="clear aligners Bellevue" />
+          </label>
+          <button type="submit">Analyze, compare, and save</button>
+          <span class="progress" role="status" aria-live="polite"></span>
+        </form>
+        <div id="compare-error" class="error" role="alert" hidden></div>
+        <div id="compare-results" class="results" aria-live="polite"></div>
+      </section>
+
+      <section id="history-panel" class="panel" aria-labelledby="history-heading" hidden>
+        <div class="panel-heading">
+          <div>
+            <p class="step">Verify → Monitor</p>
+            <h2 id="history-heading">Saved comparison runs</h2>
+          </div>
+          <button id="refresh-history" class="secondary" type="button">Refresh history</button>
+        </div>
+        <div id="history-error" class="error" role="alert" hidden></div>
+        <div id="history-results" class="results" aria-live="polite"></div>
+      </section>
+    </main>
+
+    <footer>
+      <p><strong>Evidence boundary:</strong> public-page observations and transparent editorial heuristics only. No private analytics, backlink data, automatic rankings, AI APIs, or causation claims.</p>
+    </footer>
+    <script src="/app.js" defer></script>
+  </body>
+</html>
