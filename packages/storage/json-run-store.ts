@@ -134,14 +134,42 @@ const comparisonGapSchema = z.looseObject({
   caution: z.string().min(1)
 });
 
+const metricDefinitionSchema = z.looseObject({
+  key: z.string().min(1),
+  label: z.string().min(1),
+  whatItShows: z.string().min(1),
+  whyItMayHelp: z.string().min(1),
+  direction: z.enum(["higher-is-more", "lower-is-better", "context-only"])
+});
+
+const comparisonRowSchema = z.looseObject({
+  role: z.enum(["target", "competitor"]),
+  url: httpUrlSchema,
+  finalUrl: httpUrlSchema,
+  manualRankObservation: z.number().int().min(1).max(1_000).nullable(),
+  metrics: z.record(z.string(), z.union([z.number(), z.boolean(), z.string(), z.null()])),
+  schemaTypes: z.array(z.string()),
+  topicTerms: z.array(z.string()),
+  questions: z.array(z.string())
+});
+
+const targetAdvantageSchema = z.looseObject({
+  advantageId: z.string().min(1),
+  metric: z.string().min(1),
+  targetEvidence: z.array(evidenceSchema),
+  competitorEvidence: z.array(competitorEvidenceSchema),
+  whatDiffers: z.string().min(1),
+  interpretation: z.string().min(1)
+});
+
 const comparisonSchema = z.looseObject({
   targetUrl: httpUrlSchema,
   competitorUrls: z.array(httpUrlSchema).min(1).max(3),
   queryLabel: z.string().nullable(),
-  metricDefinitions: z.array(z.unknown()),
-  matrix: z.array(z.unknown()).min(2).max(4),
+  metricDefinitions: z.array(metricDefinitionSchema),
+  matrix: z.array(comparisonRowSchema).min(2).max(4),
   targetGaps: z.array(comparisonGapSchema),
-  targetAdvantages: z.array(z.unknown()),
+  targetAdvantages: z.array(targetAdvantageSchema),
   competitorOnlySchemaTypes: z.array(z.string()),
   competitorOnlyTopics: z.array(z.string()),
   competitorOnlyQuestions: z.array(z.string()),
@@ -158,6 +186,22 @@ const observedChangeSchema = z.looseObject({
   currentValue: z.unknown()
 });
 
+const findingChangeSchema = z.looseObject({
+  sourceUrl: httpUrlSchema,
+  newRuleIds: z.array(z.string()),
+  resolvedRuleIds: z.array(z.string()),
+  unchangedRuleIds: z.array(z.string())
+});
+
+const rankObservationChangeSchema = z.looseObject({
+  url: httpUrlSchema,
+  previous: z.number().int().min(1).max(1_000).nullable(),
+  current: z.number().int().min(1).max(1_000).nullable(),
+  delta: z.number().int().nullable(),
+  source: z.literal("manual"),
+  change: z.enum(["added", "removed", "changed"])
+});
+
 const historySchema = z.looseObject({
   previousRunId: z.string().min(1),
   previousCreatedAt: z.string().min(1),
@@ -167,11 +211,15 @@ const historySchema = z.looseObject({
   headingChanges: z.array(observedChangeSchema),
   contentCountChanges: z.array(observedChangeSchema),
   linkAndMediaChanges: z.array(observedChangeSchema),
-  findingChanges: z.array(z.unknown()),
+  findingChanges: z.array(findingChangeSchema),
   competitorChanges: z.looseObject({ addedUrls: z.array(httpUrlSchema), removedUrls: z.array(httpUrlSchema), observedChanges: z.array(observedChangeSchema) }),
-  rankObservationChanges: z.array(z.unknown()),
+  rankObservationChanges: z.array(rankObservationChangeSchema),
   rankComparisonSkippedReason: z.string().nullable(),
-  correlationSummary: z.unknown()
+  correlationSummary: z.looseObject({
+    rankObservationChange: rankObservationChangeSchema.nullable(),
+    siteChangesSincePreviousRun: z.array(observedChangeSchema),
+    interpretation: z.string().min(1)
+  })
 });
 
 const runRecordSchema = z.looseObject({

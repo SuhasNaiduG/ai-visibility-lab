@@ -1,72 +1,184 @@
+import { resolve } from "node:path";
 import express, {
+  type Express,
   type NextFunction,
   type Request,
   type Response
 } from "express";
-import { z } from "zod";
-import { analyzeUrl } from "./analyze.js";
+import { CrawlerError } from "../../packages/crawler/errors.js";
+import { normalizeUrl } from "../../packages/crawler/url.js";
+import {
+  analyzeRequestSchema,
+  compareRequestSchema,
+  latestRunQuerySchema
+} from "../../packages/schemas/api.js";
+import {
+  JsonRunStore,
+  RunStoreError
+} from "../../packages/storage/json-run-store.js";
+import type {
+  RunRecord,
+  RunStore
+} from "../../packages/storage/types.js";
+import { analyzeUrl, type AnalysisResult } from "./analyze.js";
+import {
+  compareAndSaveRun,
+  type CompareRunInput
+} from "./compare.js";
 
-const analyzeRequestSchema = z.object({
-  url: z.string().min(1, "URL is required")
-});
+export interface AppDependencies {
+  analyze: (url: string) => Promise<AnalysisResult>;
+  compareAndSave: (input: CompareRunInput) => Promise<RunRecord>;
+  runStore: RunStore;
+}
 
-export const app = express();
-
-app.use(express.json());
-
-app.get("/health", (_request: Request, response: Response) => {
-  response.status(200).json({
-    status: "ok"
-  });
-});
-
-app.post(
-  "/api/analyze",
-  async (
-    request: Request,
-    response: Response,
-    next: NextFunction
-  ): Promise<void> => {
-    try {
-      const validation = analyzeRequestSchema.safeParse(request.body);
-
-      if (!validation.success) {
-        response.status(400).json({
-          error: "Invalid request",
-          details: validation.error.flatten()
-        });
-
-        return;
-      }
-
-      const result = await analyzeUrl(validation.data.url);
-
-      response.status(200).json(result);
-    } catch (error: unknown) {
-      next(error);
-    }
+class ApiError extends Error {
+  constructor(
+    readonly status: number,
+    readonly code: string,
+    message: string,
+    readonly details: unknown = {}
+  ) {
+    super(message);
+    this.name = "ApiError";
   }
-);
+}
 
-app.use(
-  (
+export function createApp(overrides: Partial<AppDependencies> = {}): Express {
+  const runStore = overrides.runStore ?? new JsonRunStore();
+  const analyze = overrides.analyze ?? analyzeUrl;
+  const compareAndSave = overrides.compareAndSave ?? ((input) =>
+    compareAndSaveRun(input, { store: runStore, analyze }));
+  const app = express();
+
+  app.disable("x-powered-by");
+  app.use(express.json({ limit: "100kb" }));
+
+  app.get("/health", (_request: Request, response: Response) => {
+    response.status(200).json({ status: "ok" });
+  });
+
+  app.post("/api/analyze", asyncHandler(async (request, response) => {
+    const validation = analyzeRequestSchema.safeParse(request.body);
+    if (!validation.success) {
+      throw validationError(validation.error.flatten());
+    }
+    response.status(200).json(await analyze(validation.data.url));
+  }));
+
+  app.post("/api/compare", asyncHandler(async (request, response) => {
+    const validation = compareRequestSchema.safeParse(request.body);
+    if (!validation.success) {
+      throw validationError(validation.error.flatten());
+    }
+    response.status(200).json(await compareAndSave(validation.data));
+  }));
+
+  app.get("/api/runs", asyncHandler(async (_request, response) => {
+    response.status(200).json(await runStore.list());
+  }));
+
+  app.get("/api/runs/latest", asyncHandler(async (request, response) => {
+    const validation = latestRunQuerySchema.safeParse({
+      targetUrl: request.query.targetUrl
+    });
+    if (!validation.success) {
+      throw validationError(validation.error.flatten());
+    }
+    const normalized = normalizeUrl(validation.data.targetUrl).toString();
+    const run = await runStore.findLatestByTarget(normalized);
+    if (!run) {
+      throw new ApiError(404, "RUN_NOT_FOUND", "No saved run matches the target URL", { targetUrl: normalized });
+    }
+    response.status(200).json(run);
+  }));
+
+  app.get("/api/runs/:id", asyncHandler(async (request, response) => {
+    const rawId = request.params.id;
+    const id = Array.isArray(rawId) ? "" : rawId?.trim();
+    if (!id || id.length > 200) {
+      throw validationError({ fieldErrors: { id: ["A valid run ID is required"] } });
+    }
+    const run = await runStore.get(id);
+    if (!run) {
+      throw new ApiError(404, "RUN_NOT_FOUND", "Saved run was not found", { id });
+    }
+    response.status(200).json(run);
+  }));
+
+  app.use(express.static(resolve(process.cwd(), "apps", "web", "public"), {
+    index: "index.html",
+    maxAge: "1h"
+  }));
+
+  app.use("/api", (_request, _response, next) => {
+    next(new ApiError(404, "ENDPOINT_NOT_FOUND", "API endpoint was not found"));
+  });
+
+  app.use((
     error: unknown,
     _request: Request,
     response: Response,
     _next: NextFunction
   ): void => {
-    const message =
-      error instanceof Error
-        ? error.message
-        : "Unexpected analyzer error";
-
-    const isInputError =
-      message === "URL is required" ||
-      message === "Invalid URL" ||
-      message.includes("HTTP and HTTPS");
-
-    response.status(isInputError ? 400 : 502).json({
-      error: message
+    const mapped = mapError(error);
+    response.status(mapped.status).json({
+      error: {
+        code: mapped.code,
+        message: mapped.message,
+        details: mapped.details
+      }
     });
+  });
+
+  return app;
+}
+
+function asyncHandler(
+  handler: (request: Request, response: Response) => Promise<void>
+): (request: Request, response: Response, next: NextFunction) => void {
+  return (request, response, next) => {
+    handler(request, response).catch(next);
+  };
+}
+
+function validationError(details: unknown): ApiError {
+  return new ApiError(400, "INVALID_REQUEST", "Request validation failed", details);
+}
+
+function mapError(error: unknown): ApiError {
+  if (error instanceof ApiError) return error;
+  if (error instanceof CrawlerError) {
+    return new ApiError(error.httpStatus, error.code, error.message, error.details);
   }
-);
+  if (error instanceof RunStoreError) {
+    return new ApiError(500, "RUN_STORE_ERROR", "Run history is unavailable", { code: error.code });
+  }
+  if (isJsonSyntaxError(error)) {
+    return new ApiError(400, "INVALID_JSON", "Request body contains invalid JSON");
+  }
+  if (isHttpStatusError(error, 413)) {
+    return new ApiError(413, "REQUEST_TOO_LARGE", "Request body exceeds the allowed size");
+  }
+  if (error instanceof Error && (
+    error.message === "URL is required" ||
+    error.message === "Invalid URL" ||
+    error.message.includes("HTTP and HTTPS")
+  )) {
+    return new ApiError(400, "INVALID_URL", error.message);
+  }
+  if (error instanceof Error && error.message.startsWith("Manual rank")) {
+    return new ApiError(400, "INVALID_RANK_OBSERVATION", error.message);
+  }
+  return new ApiError(500, "INTERNAL_ERROR", "Unexpected analyzer error");
+}
+
+function isJsonSyntaxError(error: unknown): boolean {
+  return error instanceof SyntaxError && isHttpStatusError(error, 400);
+}
+
+function isHttpStatusError(error: unknown, status: number): boolean {
+  return error instanceof Error && "status" in error && (error as Error & { status?: number }).status === status;
+}
+
+export const app = createApp();

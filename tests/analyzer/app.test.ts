@@ -1,133 +1,187 @@
 import request from "supertest";
-import {
-  beforeEach,
-  describe,
-  expect,
-  it,
-  vi
-} from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { CrawlerError } from "../../packages/crawler/errors.js";
+import { parsePage } from "../../packages/parser/page.js";
+import type { RunRecord, RunStore } from "../../packages/storage/types.js";
+import { createApp } from "../../services/analyzer/app.js";
+import type { AnalysisResult } from "../../services/analyzer/analyze.js";
+import type { CompareRunInput } from "../../services/analyzer/compare.js";
+import { makeAnalysis, makeComparison } from "../helpers/analysis.js";
 
-vi.mock("../../services/analyzer/analyze.js", () => ({
-  analyzeUrl: vi.fn()
-}));
+const pageUrl = "https://example.com/";
+const parsed = parsePage(`<!doctype html><html lang="en"><head>
+  <title>Example service page</title>
+  <meta name="description" content="An example description with enough public evidence for the API fixture." />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="index, follow" />
+  <link rel="canonical" href="https://example.com/" />
+</head><body><h1>Example service</h1><a href="/contact">Contact</a></body></html>`, pageUrl);
 
-import { app } from "../../services/analyzer/app.js";
-import { analyzeUrl } from "../../services/analyzer/analyze.js";
+const resource = (name: "robots.txt" | "sitemap.xml") => ({
+  url: `${pageUrl}${name}`,
+  available: true,
+  statusCode: 200,
+  finalUrl: `${pageUrl}${name}`,
+  evidence: {
+    requestedUrl: `${pageUrl}${name}`,
+    finalUrl: `${pageUrl}${name}`,
+    statusCode: 200,
+    checkedAt: "2026-07-15T00:00:00.000Z",
+    responseTimeMs: 5,
+    redirectCount: 0,
+    redirectChain: [],
+    networkChecks: [],
+    error: null
+  }
+});
 
-const mockedAnalyzeUrl = vi.mocked(analyzeUrl);
+const analysisResult: AnalysisResult = {
+  requestedUrl: "example.com",
+  normalizedUrl: pageUrl,
+  statusCode: 200,
+  finalUrl: pageUrl,
+  responseTimeMs: 25,
+  fetchedAt: "2026-07-15T00:00:00.000Z",
+  redirectCount: 0,
+  redirectObserved: false,
+  redirectChain: [],
+  networkChecks: [],
+  ...parsed,
+  robotsTxtAvailable: true,
+  robotsTxtStatusCode: 200,
+  sitemapXmlAvailable: true,
+  sitemapXmlStatusCode: 200,
+  robotsTxtUrl: `${pageUrl}robots.txt`,
+  sitemapXmlUrl: `${pageUrl}sitemap.xml`,
+  siteResources: { robotsTxt: resource("robots.txt"), sitemapXml: resource("sitemap.xml") },
+  findings: [],
+  rawEvidence: []
+};
+
+function runRecord(): RunRecord {
+  const target = makeAnalysis("https://target.example/");
+  const competitor = makeAnalysis("https://competitor.example/");
+  return {
+    id: "run-1",
+    createdAt: "2026-07-15T00:00:00.000Z",
+    schemaVersion: "1",
+    applicationVersion: "1.0.0",
+    targetUrl: target.normalizedUrl,
+    competitorUrls: [competitor.normalizedUrl],
+    queryLabel: "example query",
+    rankObservations: {},
+    analyses: [target, competitor],
+    comparison: makeComparison(target, competitor),
+    history: null
+  };
+}
+
+class MemoryRunStore implements RunStore {
+  records: RunRecord[] = [];
+  save = vi.fn(async () => { throw new Error("not used"); });
+  get = vi.fn(async (id: string) => this.records.find((run) => run.id === id) ?? null);
+  list = vi.fn(async () => this.records.map((run) => ({
+    id: run.id,
+    createdAt: run.createdAt,
+    targetUrl: run.targetUrl,
+    competitorUrls: run.competitorUrls,
+    queryLabel: run.queryLabel,
+    findingCount: 0,
+    gapCount: run.comparison.targetGaps.length,
+    hasPreviousRun: run.history !== null
+  })));
+  findLatestByTarget = vi.fn(async (url: string) => this.records.find((run) => run.targetUrl === url) ?? null);
+}
 
 describe("analyzer API", () => {
+  let analyze: ReturnType<typeof vi.fn<(url: string) => Promise<AnalysisResult>>>;
+  let compareAndSave: ReturnType<typeof vi.fn<(input: CompareRunInput) => Promise<RunRecord>>>;
+  let store: MemoryRunStore;
+
   beforeEach(() => {
-    mockedAnalyzeUrl.mockReset();
+    analyze = vi.fn(async () => analysisResult);
+    compareAndSave = vi.fn<(input: CompareRunInput) => Promise<RunRecord>>(async () => runRecord());
+    store = new MemoryRunStore();
   });
+
+  function app() {
+    return createApp({ analyze, compareAndSave, runStore: store });
+  }
 
   it("returns the health status", async () => {
-    const response = await request(app).get("/health");
-
+    const response = await request(app()).get("/health");
     expect(response.status).toBe(200);
-    expect(response.body).toEqual({
-      status: "ok"
-    });
+    expect(response.body).toEqual({ status: "ok" });
   });
 
-  it("rejects a missing URL", async () => {
-    const response = await request(app)
-      .post("/api/analyze")
-      .send({});
-
+  it.each([{}, { url: "" }])("rejects a missing or empty URL", async (body) => {
+    const response = await request(app()).post("/api/analyze").send(body);
     expect(response.status).toBe(400);
-    expect(response.body.error).toBe("Invalid request");
-    expect(mockedAnalyzeUrl).not.toHaveBeenCalled();
-  });
-
-  it("rejects an empty URL", async () => {
-    const response = await request(app)
-      .post("/api/analyze")
-      .send({
-        url: ""
-      });
-
-    expect(response.status).toBe(400);
-    expect(response.body.error).toBe("Invalid request");
-    expect(mockedAnalyzeUrl).not.toHaveBeenCalled();
+    expect(response.body.error).toEqual(expect.objectContaining({ code: "INVALID_REQUEST", message: "Request validation failed" }));
+    expect(analyze).not.toHaveBeenCalled();
   });
 
   it("returns a structured analysis result", async () => {
-    mockedAnalyzeUrl.mockResolvedValue({
-      requestedUrl: "https://example.com/",
-      statusCode: 200,
-      finalUrl: "https://example.com/",
-      responseTimeMs: 150,
-      fetchedAt: "2026-07-15T00:00:00.000Z",
-      title: "Example",
-      metaDescription: "Example description",
-      canonicalUrl: "https://example.com/",
-      robotsMeta: "index, follow",
-      h1Count: 1,
-      h1Text: ["Example heading"],
-      headingHierarchy: [
-        {
-          level: 1,
-          text: "Example heading"
-        }
-      ],
-      jsonLdBlocks: [],
-      schemaTypes: [],
-      internalLinkCount: 3,
-      externalLinkCount: 1,
-      robotsTxtAvailable: true,
-      robotsTxtStatusCode: 200,
-      sitemapXmlAvailable: true,
-      sitemapXmlStatusCode: 200
-    });
-
-    const response = await request(app)
-      .post("/api/analyze")
-      .send({
-        url: "example.com"
-      });
-
+    const response = await request(app()).post("/api/analyze").send({ url: "example.com" });
     expect(response.status).toBe(200);
-    expect(response.body.statusCode).toBe(200);
-    expect(response.body.title).toBe("Example");
-    expect(response.body.h1Count).toBe(1);
-    expect(response.body.robotsTxtAvailable).toBe(true);
-    expect(mockedAnalyzeUrl).toHaveBeenCalledWith(
-      "example.com"
-    );
+    expect(response.body).toEqual(expect.objectContaining({ normalizedUrl: pageUrl, title: "Example service page", h1Count: 1, findings: [] }));
+    expect(analyze).toHaveBeenCalledWith("example.com");
   });
 
-  it("returns a client error for an unsupported protocol", async () => {
-    mockedAnalyzeUrl.mockRejectedValue(
-      new Error("Only HTTP and HTTPS URLs are supported")
-    );
-
-    const response = await request(app)
-      .post("/api/analyze")
-      .send({
-        url: "ftp://example.com"
-      });
-
+  it("maps an unsupported or unsafe URL to a client-safe error", async () => {
+    analyze.mockRejectedValue(new CrawlerError("PRIVATE_NETWORK_TARGET", "URL resolves to a private or non-public network address", { details: { hostname: "localhost" } }));
+    const response = await request(app()).post("/api/analyze").send({ url: "http://localhost" });
     expect(response.status).toBe(400);
-    expect(response.body).toEqual({
-      error: "Only HTTP and HTTPS URLs are supported"
-    });
+    expect(response.body).toEqual({ error: { code: "PRIVATE_NETWORK_TARGET", message: "URL resolves to a private or non-public network address", details: { hostname: "localhost" } } });
   });
 
-  it("returns a gateway error when analysis fails", async () => {
-    mockedAnalyzeUrl.mockRejectedValue(
-      new Error("Website request failed")
-    );
-
-    const response = await request(app)
-      .post("/api/analyze")
-      .send({
-        url: "https://example.com"
-      });
-
+  it("maps fetch and timeout failures without returning a stack", async () => {
+    analyze.mockRejectedValue(new CrawlerError("UPSTREAM_FETCH_FAILED", "Website request failed"));
+    const response = await request(app()).post("/api/analyze").send({ url: "https://example.com" });
     expect(response.status).toBe(502);
-    expect(response.body).toEqual({
-      error: "Website request failed"
-    });
+    expect(response.body).toEqual({ error: { code: "UPSTREAM_FETCH_FAILED", message: "Website request failed", details: {} } });
+    expect(JSON.stringify(response.body)).not.toMatch(/stack/i);
+  });
+
+  it("uses 500 for an unexpected internal failure", async () => {
+    analyze.mockRejectedValue(new Error("sensitive internal detail"));
+    const response = await request(app()).post("/api/analyze").send({ url: "https://example.com" });
+    expect(response.status).toBe(500);
+    expect(response.body.error).toEqual({ code: "INTERNAL_ERROR", message: "Unexpected analyzer error", details: {} });
+    expect(JSON.stringify(response.body)).not.toContain("sensitive internal detail");
+  });
+
+  it("validates comparison limits, uniqueness, and rank ownership", async () => {
+    const noCompetitors = await request(app()).post("/api/compare").send({ targetUrl: pageUrl, competitorUrls: [] });
+    expect(noCompetitors.status).toBe(400);
+    const duplicate = await request(app()).post("/api/compare").send({ targetUrl: pageUrl, competitorUrls: ["https://two.example", "https://two.example"] });
+    expect(duplicate.status).toBe(400);
+    const foreignRank = await request(app()).post("/api/compare").send({ targetUrl: pageUrl, competitorUrls: ["https://two.example"], rankObservations: { "https://other.example": 2 } });
+    expect(foreignRank.status).toBe(400);
+    expect(compareAndSave).not.toHaveBeenCalled();
+  });
+
+  it("runs and returns a saved comparison", async () => {
+    const payload = { targetUrl: "https://target.example", competitorUrls: ["https://competitor.example"], queryLabel: "example query", rankObservations: { "https://target.example": 8 } };
+    const response = await request(app()).post("/api/compare").send(payload);
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual(expect.objectContaining({ id: "run-1", comparison: expect.objectContaining({ targetUrl: "https://target.example/" }) }));
+    expect(compareAndSave).toHaveBeenCalledWith(payload);
+  });
+
+  it("lists, opens, and locates saved runs and returns 404 when missing", async () => {
+    store.records = [runRecord()];
+    expect((await request(app()).get("/api/runs")).body[0]).toEqual(expect.objectContaining({ id: "run-1" }));
+    expect((await request(app()).get("/api/runs/run-1")).body.id).toBe("run-1");
+    expect((await request(app()).get("/api/runs/latest").query({ targetUrl: "https://target.example" })).body.id).toBe("run-1");
+    const missing = await request(app()).get("/api/runs/not-found");
+    expect(missing.status).toBe(404);
+    expect(missing.body.error.code).toBe("RUN_NOT_FOUND");
+  });
+
+  it("returns a consistent error for invalid JSON", async () => {
+    const response = await request(app()).post("/api/analyze").set("Content-Type", "application/json").send("{");
+    expect(response.status).toBe(400);
+    expect(response.body.error.code).toBe("INVALID_JSON");
   });
 });
