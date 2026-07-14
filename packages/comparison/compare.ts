@@ -1,4 +1,8 @@
 import type { Evidence } from "../rules/types.js";
+import {
+  classifyComparisonEligibility,
+  COMPARISON_INCOMPLETE_MESSAGE
+} from "./eligibility.js";
 import type {
   ComparableAnalysis,
   ComparisonGap,
@@ -9,6 +13,8 @@ import type {
   CompetitorEvidence,
   ManualRankObservations,
   MetricDefinition,
+  ComparisonSite,
+  ComparisonSiteInput,
   TargetAdvantage
 } from "./types.js";
 
@@ -66,9 +72,10 @@ export const METRIC_DEFINITIONS: MetricDefinition[] = [
   definition("hasLocationSignals", "Location signals", "Observed location text or structured properties", "Location evidence clarifies where an offering applies.", "context-only")
 ];
 
-interface ComparisonInput {
+export interface ComparisonInput {
   target: ComparableAnalysis;
   competitors: ComparableAnalysis[];
+  sites?: ComparisonSiteInput[];
   queryLabel?: string | null;
   rankObservations?: ManualRankObservations;
 }
@@ -107,50 +114,75 @@ export function compareAnalyses(input: ComparisonInput): ComparisonResult {
   }
 
   const all = [input.target, ...input.competitors];
+  const sites = createSites(all, input.sites);
   const rows = all.map((analysis, index) => toRow(
     analysis,
-    index === 0 ? "target" : "competitor",
+    sites[index]!,
     findRank(input.rankObservations, analysis)
   ));
   const targetRow = rows[0]!;
-  const competitorRows = rows.slice(1);
+  const targetSite = sites[0]!;
+  const benchmarkEntries = input.competitors
+    .map((analysis, index) => ({ analysis, row: rows[index + 1]!, site: sites[index + 1]! }))
+    .filter((entry) => entry.site.eligibility.usableAsBenchmark);
+  const benchmarkCompetitors = benchmarkEntries.map((entry) => entry.analysis);
+  const benchmarkRows = benchmarkEntries.map((entry) => entry.row);
+  const benchmarkSites = benchmarkEntries.map((entry) => entry.site);
+  const excludedCompetitorUrls = sites
+    .slice(1)
+    .filter((site) => !site.eligibility.usableAsBenchmark)
+    .map((site) => site.normalizedUrl);
+  const anyDegraded = sites.some((site) => site.eligibility.status === "degraded");
+  const anyIneligible = sites.some((site) => site.eligibility.status === "ineligible");
+  const conclusionStatus: ComparisonResult["conclusionStatus"] =
+    !targetSite.eligibility.usableAsBenchmark || benchmarkCompetitors.length === 0
+      ? "unavailable"
+      : anyDegraded || anyIneligible
+      ? "partial"
+      : "complete";
   const gaps: ComparisonGap[] = [];
   const advantages: TargetAdvantage[] = [];
 
-  for (const rule of scalarRules) {
-    evaluateScalar(rule, input.target, input.competitors, targetRow, competitorRows, gaps, advantages);
+  if (conclusionStatus !== "unavailable") {
+    for (const rule of scalarRules) {
+      evaluateScalar(rule, input.target, benchmarkCompetitors, targetRow, benchmarkRows, benchmarkSites, gaps, advantages);
+    }
+
+    evaluateBooleanDifference("GAP_INDEXABILITY", "ADV_INDEXABILITY", "indexable", input.target, benchmarkCompetitors, benchmarkSites, targetRow.metrics.indexable, benchmarkRows.map((row) => row.metrics.indexable), gaps, advantages, "Remove only unintended blocking directives or response errors, then verify the public page is intentionally indexable.", "Rerun and verify status, robots meta, and indexability evidence.", "high");
+    evaluateBooleanDifference("GAP_TITLE_MISSING", "ADV_TITLE_PRESENT", "hasTitle", input.target, benchmarkCompetitors, benchmarkSites, targetRow.metrics.hasTitle, benchmarkRows.map((row) => row.metrics.hasTitle), gaps, advantages, "Add one concise, accurate HTML title that identifies the page and its subject.", "Rerun and inspect title text and length evidence.", "high");
+    evaluateBooleanDifference("GAP_DESCRIPTION_MISSING", "ADV_DESCRIPTION_PRESENT", "hasMetaDescription", input.target, benchmarkCompetitors, benchmarkSites, targetRow.metrics.hasMetaDescription, benchmarkRows.map((row) => row.metrics.hasMetaDescription), gaps, advantages, "Add an original factual meta description that summarizes the page without promises or unsupported claims.", "Rerun and inspect description text and length evidence.", "medium");
+    evaluateBooleanDifference("GAP_CANONICAL_MISMATCH", "ADV_CANONICAL_MATCH", "canonicalMatches", input.target, benchmarkCompetitors, benchmarkSites, targetRow.metrics.canonicalMatches, benchmarkRows.map((row) => row.metrics.canonicalMatches), gaps, advantages, "Set one valid canonical to the intentionally preferred public URL after confirming redirect and duplicate-URL behavior.", "Rerun and verify the resolved canonical equals the final URL.", "high");
+    evaluateBooleanDifference("GAP_LANGUAGE_MISSING", "ADV_LANGUAGE_PRESENT", "hasLanguage", input.target, benchmarkCompetitors, benchmarkSites, targetRow.metrics.hasLanguage, benchmarkRows.map((row) => row.metrics.hasLanguage), gaps, advantages, "Add the truthful BCP 47 language code to the root html element.", "Rerun and verify documentLanguage.", "low");
+    evaluateBooleanDifference("GAP_VIEWPORT_MISSING", "ADV_VIEWPORT_PRESENT", "viewportPresent", input.target, benchmarkCompetitors, benchmarkSites, targetRow.metrics.viewportPresent, benchmarkRows.map((row) => row.metrics.viewportPresent), gaps, advantages, "Add an appropriate viewport meta element and verify mobile rendering.", "Rerun and verify viewport evidence plus a browser check.", "medium");
+    evaluateBooleanDifference("GAP_H1_STRUCTURE", "ADV_H1_STRUCTURE", "h1StructureValid", input.target, benchmarkCompetitors, benchmarkSites, targetRow.metrics.h1StructureValid, benchmarkRows.map((row) => row.metrics.h1StructureValid), gaps, advantages, "Provide one descriptive primary H1 in the source; review responsive duplicates before removing intentional markup.", "Rerun and inspect H1 count and raw text.", "medium");
+    evaluateBooleanDifference("GAP_FAQ_STRUCTURE", "ADV_FAQ_STRUCTURE", "faqIndicatorCount", input.target, benchmarkCompetitors, benchmarkSites, targetRow.metrics.faqIndicatorCount > 0, benchmarkRows.map((row) => row.metrics.faqIndicatorCount > 0), gaps, advantages, "If users genuinely ask recurring questions, add an original visible FAQ or Q&A section with accurate answers.", "Rerun and inspect FAQ indicators and detected questions.", "medium");
+    evaluateBooleanDifference("GAP_IDENTITY_SIGNALS", "ADV_IDENTITY_SIGNALS", "hasIdentitySignals", input.target, benchmarkCompetitors, benchmarkSites, targetRow.metrics.hasIdentitySignals, benchmarkRows.map((row) => row.metrics.hasIdentitySignals), gaps, advantages, "Add truthful organization, author, or provider identity information supported by the visible page; do not invent credentials.", "Rerun and inspect identity-term source evidence.", "high");
+    evaluateBooleanDifference("GAP_TRUST_SIGNALS", "ADV_TRUST_SIGNALS", "hasTrustSignals", input.target, benchmarkCompetitors, benchmarkSites, targetRow.metrics.hasTrustSignals, benchmarkRows.map((row) => row.metrics.hasTrustSignals), gaps, advantages, "Identify the real author or provider and include only verifiable qualifications relevant to the content.", "Rerun and inspect trust/provider signal sources.", "medium");
+    evaluateBooleanDifference("GAP_CONTACT_SIGNALS", "ADV_CONTACT_SIGNALS", "hasContactSignals", input.target, benchmarkCompetitors, benchmarkSites, targetRow.metrics.hasContactSignals, benchmarkRows.map((row) => row.metrics.hasContactSignals), gaps, advantages, "Add real contact or location information where appropriate and keep it consistent with visible business details.", "Rerun and inspect contact-term source evidence.", "medium");
+    evaluateBooleanDifference("GAP_LOCATION_SIGNALS", "ADV_LOCATION_SIGNALS", "hasLocationSignals", input.target, benchmarkCompetitors, benchmarkSites, targetRow.metrics.hasLocationSignals, benchmarkRows.map((row) => row.metrics.hasLocationSignals), gaps, advantages, "State only genuine served locations or address details where relevant.", "Rerun and inspect location signal source evidence.", "medium");
   }
 
-  evaluateBooleanDifference("GAP_INDEXABILITY", "ADV_INDEXABILITY", "indexable", input.target, input.competitors, targetRow.metrics.indexable, competitorRows.map((row) => row.metrics.indexable), gaps, advantages, "Remove only unintended blocking directives or response errors, then verify the public page is intentionally indexable.", "Rerun and verify status, robots meta, and indexability evidence.", "high");
-  evaluateBooleanDifference("GAP_TITLE_MISSING", "ADV_TITLE_PRESENT", "hasTitle", input.target, input.competitors, targetRow.metrics.hasTitle, competitorRows.map((row) => row.metrics.hasTitle), gaps, advantages, "Add one concise, accurate HTML title that identifies the page and its subject.", "Rerun and inspect title text and length evidence.", "high");
-  evaluateBooleanDifference("GAP_DESCRIPTION_MISSING", "ADV_DESCRIPTION_PRESENT", "hasMetaDescription", input.target, input.competitors, targetRow.metrics.hasMetaDescription, competitorRows.map((row) => row.metrics.hasMetaDescription), gaps, advantages, "Add an original factual meta description that summarizes the page without promises or unsupported claims.", "Rerun and inspect description text and length evidence.", "medium");
-  evaluateBooleanDifference("GAP_CANONICAL_MISMATCH", "ADV_CANONICAL_MATCH", "canonicalMatches", input.target, input.competitors, targetRow.metrics.canonicalMatches, competitorRows.map((row) => row.metrics.canonicalMatches), gaps, advantages, "Set one valid canonical to the intentionally preferred public URL after confirming redirect and duplicate-URL behavior.", "Rerun and verify the resolved canonical equals the final URL.", "high");
-  evaluateBooleanDifference("GAP_LANGUAGE_MISSING", "ADV_LANGUAGE_PRESENT", "hasLanguage", input.target, input.competitors, targetRow.metrics.hasLanguage, competitorRows.map((row) => row.metrics.hasLanguage), gaps, advantages, "Add the truthful BCP 47 language code to the root html element.", "Rerun and verify documentLanguage.", "low");
-  evaluateBooleanDifference("GAP_VIEWPORT_MISSING", "ADV_VIEWPORT_PRESENT", "viewportPresent", input.target, input.competitors, targetRow.metrics.viewportPresent, competitorRows.map((row) => row.metrics.viewportPresent), gaps, advantages, "Add an appropriate viewport meta element and verify mobile rendering.", "Rerun and verify viewport evidence plus a browser check.", "medium");
-  evaluateBooleanDifference("GAP_H1_STRUCTURE", "ADV_H1_STRUCTURE", "h1StructureValid", input.target, input.competitors, targetRow.metrics.h1StructureValid, competitorRows.map((row) => row.metrics.h1StructureValid), gaps, advantages, "Provide one descriptive primary H1 in the source; review responsive duplicates before removing intentional markup.", "Rerun and inspect H1 count and raw text.", "medium");
-  evaluateBooleanDifference("GAP_FAQ_STRUCTURE", "ADV_FAQ_STRUCTURE", "faqIndicatorCount", input.target, input.competitors, targetRow.metrics.faqIndicatorCount > 0, competitorRows.map((row) => row.metrics.faqIndicatorCount > 0), gaps, advantages, "If users genuinely ask recurring questions, add an original visible FAQ or Q&A section with accurate answers.", "Rerun and inspect FAQ indicators and detected questions.", "medium");
-  evaluateBooleanDifference("GAP_IDENTITY_SIGNALS", "ADV_IDENTITY_SIGNALS", "hasIdentitySignals", input.target, input.competitors, targetRow.metrics.hasIdentitySignals, competitorRows.map((row) => row.metrics.hasIdentitySignals), gaps, advantages, "Add truthful organization, author, or provider identity information supported by the visible page; do not invent credentials.", "Rerun and inspect identity-term source evidence.", "high");
-  evaluateBooleanDifference("GAP_TRUST_SIGNALS", "ADV_TRUST_SIGNALS", "hasTrustSignals", input.target, input.competitors, targetRow.metrics.hasTrustSignals, competitorRows.map((row) => row.metrics.hasTrustSignals), gaps, advantages, "Identify the real author or provider and include only verifiable qualifications relevant to the content.", "Rerun and inspect trust/provider signal sources.", "medium");
-  evaluateBooleanDifference("GAP_CONTACT_SIGNALS", "ADV_CONTACT_SIGNALS", "hasContactSignals", input.target, input.competitors, targetRow.metrics.hasContactSignals, competitorRows.map((row) => row.metrics.hasContactSignals), gaps, advantages, "Add real contact or location information where appropriate and keep it consistent with visible business details.", "Rerun and inspect contact-term source evidence.", "medium");
-  evaluateBooleanDifference("GAP_LOCATION_SIGNALS", "ADV_LOCATION_SIGNALS", "hasLocationSignals", input.target, input.competitors, targetRow.metrics.hasLocationSignals, competitorRows.map((row) => row.metrics.hasLocationSignals), gaps, advantages, "State only genuine served locations or address details where relevant.", "Rerun and inspect location signal source evidence.", "medium");
-
-  const competitorOnlySchemaTypes = setDifference(union(input.competitors.flatMap((item) => item.schemaTypes)), input.target.schemaTypes);
-  const competitorOnlyTopics = setDifference(union(input.competitors.flatMap(topicTerms)), topicTerms(input.target));
-  const competitorOnlyQuestions = setDifference(union(input.competitors.flatMap((item) => item.detectedQuestions.map(normalizePhrase))), input.target.detectedQuestions.map(normalizePhrase));
+  const competitorOnlySchemaTypes = conclusionStatus === "unavailable" ? [] : setDifference(union(benchmarkCompetitors.flatMap((item) => item.schemaTypes)), input.target.schemaTypes);
+  const competitorOnlyTopics = conclusionStatus === "unavailable" ? [] : setDifference(union(benchmarkCompetitors.flatMap(topicTerms)), topicTerms(input.target));
+  const competitorOnlyQuestions = conclusionStatus === "unavailable" ? [] : setDifference(union(benchmarkCompetitors.flatMap((item) => item.detectedQuestions.map(normalizePhrase))), input.target.detectedQuestions.map(normalizePhrase));
 
   if (competitorOnlySchemaTypes.length > 0) {
-    gaps.push(createSetGap("GAP_COMPETITOR_ONLY_SCHEMA", "schemaTypes", input.target, input.competitors, competitorOnlySchemaTypes, "Validate whether any observed competitor-only type accurately describes visible target content. Add only valid JSON-LD that matches the page; never fabricate reviews, ratings, claims, or credentials.", "Validate JSON-LD and rerun to inspect parsed schema types."));
+    gaps.push(createSetGap("GAP_COMPETITOR_ONLY_SCHEMA", "schemaTypes", input.target, benchmarkCompetitors, benchmarkSites, competitorOnlySchemaTypes, "Validate whether any observed competitor-only type accurately describes visible target content. Add only valid JSON-LD that matches the page; never fabricate reviews, ratings, claims, or credentials.", "Validate JSON-LD and rerun to inspect parsed schema types."));
   }
   if (competitorOnlyTopics.length > 0) {
-    gaps.push(createSetGap("GAP_COMPETITOR_ONLY_TOPICS", "topicTerms", input.target, input.competitors, competitorOnlyTopics, "Research whether the missing themes represent real user needs, then write original factual coverage where useful. Do not copy competitor wording.", "Rerun and inspect topic terms with their title/heading sources."));
+    gaps.push(createSetGap("GAP_COMPETITOR_ONLY_TOPICS", "topicTerms", input.target, benchmarkCompetitors, benchmarkSites, competitorOnlyTopics, "Research whether the missing themes represent real user needs, then write original factual coverage where useful. Do not copy competitor wording.", "Rerun and inspect topic terms with their title/heading sources."));
   }
   if (competitorOnlyQuestions.length > 0) {
-    gaps.push(createSetGap("GAP_COMPETITOR_ONLY_QUESTIONS", "detectedQuestions", input.target, input.competitors, competitorOnlyQuestions, "Use the observed questions as research prompts only. Add independently written questions and accurate direct answers where they fit user intent.", "Rerun and inspect detected question text and direct-answer evidence."));
+    gaps.push(createSetGap("GAP_COMPETITOR_ONLY_QUESTIONS", "detectedQuestions", input.target, benchmarkCompetitors, benchmarkSites, competitorOnlyQuestions, "Use the observed questions as research prompts only. Add independently written questions and accurate direct answers where they fit user intent.", "Rerun and inspect detected question text and direct-answer evidence."));
   }
 
   return {
     targetUrl: input.target.normalizedUrl,
     competitorUrls: input.competitors.map((item) => item.normalizedUrl),
+    sites,
+    conclusionStatus,
+    incompleteMessage: anyIneligible ? COMPARISON_INCOMPLETE_MESSAGE : null,
+    excludedCompetitorUrls,
     queryLabel: input.queryLabel?.trim() || null,
     metricDefinitions: METRIC_DEFINITIONS,
     matrix: rows,
@@ -159,15 +191,51 @@ export function compareAnalyses(input: ComparisonInput): ComparisonResult {
     competitorOnlySchemaTypes,
     competitorOnlyTopics,
     competitorOnlyQuestions,
-    limitations: [...COMPARISON_LIMITATIONS]
+    limitations: [
+      ...COMPARISON_LIMITATIONS,
+      ...(excludedCompetitorUrls.length > 0
+        ? ["Ineligible competitors remain visible as raw retrieval evidence but are excluded from all competitive conclusions."]
+        : []),
+      ...(anyDegraded
+        ? ["Degraded sites returned usable but limited evidence; conclusions that include them require additional review."]
+        : [])
+    ]
   };
 }
 
-function toRow(analysis: ComparableAnalysis, role: ComparisonRow["role"], manualRankObservation: number | null): ComparisonRow {
+function createSites(analyses: ComparableAnalysis[], supplied: ComparisonSiteInput[] | undefined): ComparisonSite[] {
+  if (supplied && supplied.length !== analyses.length) {
+    throw new Error("Ordered site identity count must match analyzed site count");
+  }
+  return analyses.map((analysis, index) => {
+    const expectedRole = index === 0 ? "target" : "competitor";
+    const identity = supplied?.[index];
+    if (identity && (
+      identity.inputOrder !== index ||
+      identity.role !== expectedRole ||
+      normalizeRankKey(identity.normalizedUrl) !== normalizeRankKey(analysis.normalizedUrl)
+    )) {
+      throw new Error(`Ordered site identity does not match analysis at input order ${index}`);
+    }
+    return {
+      role: expectedRole,
+      inputOrder: index,
+      inputUrl: identity?.inputUrl ?? analysis.requestedUrl,
+      normalizedUrl: identity?.normalizedUrl ?? analysis.normalizedUrl,
+      finalUrl: analysis.finalUrl,
+      eligibility: classifyComparisonEligibility(analysis)
+    };
+  });
+}
+
+function toRow(analysis: ComparableAnalysis, site: ComparisonSite, manualRankObservation: number | null): ComparisonRow {
   return {
-    role,
+    role: site.role,
+    inputOrder: site.inputOrder,
+    inputUrl: site.inputUrl,
     url: analysis.normalizedUrl,
     finalUrl: analysis.finalUrl,
+    eligibility: site.eligibility,
     manualRankObservation,
     metrics: {
       statusCode: analysis.statusCode,
@@ -220,7 +288,7 @@ function toRow(analysis: ComparableAnalysis, role: ComparisonRow["role"], manual
   };
 }
 
-function evaluateScalar(rule: ScalarRule, target: ComparableAnalysis, competitors: ComparableAnalysis[], targetRow: ComparisonRow, competitorRows: ComparisonRow[], gaps: ComparisonGap[], advantages: TargetAdvantage[]): void {
+function evaluateScalar(rule: ScalarRule, target: ComparableAnalysis, competitors: ComparableAnalysis[], targetRow: ComparisonRow, competitorRows: ComparisonRow[], competitorSites: ComparisonSite[], gaps: ComparisonGap[], advantages: TargetAdvantage[]): void {
   const targetValue = targetRow.metrics[rule.key];
   const competitorValues = competitorRows.map((row) => row.metrics[rule.key]);
   if (typeof targetValue !== "number" || competitorValues.some((value) => typeof value !== "number")) return;
@@ -230,8 +298,8 @@ function evaluateScalar(rule: ScalarRule, target: ComparableAnalysis, competitor
     gaps.push({
       gapId: rule.gapId,
       metric: rule.key,
-      targetEvidence: [metricEvidence(target, rule.key, targetValue)],
-      competitorEvidence: competitorEvidence(competitors, rule.key, competitorValues),
+      targetEvidence: metricEvidence(target, rule.key, targetValue),
+      competitorEvidence: competitorEvidence(competitors, competitorSites, rule.key, competitorValues, (value) => value === relevant),
       whatDiffers: `Target ${rule.key} is ${targetValue}; the relevant competitor benchmark is ${relevant} (transparent delta ${difference}).`,
       competitorObservation: "At least one competitor shows a different observed public-page signal; this does not prove causation or that the target should copy it.",
       whyItMayMatter: METRIC_DEFINITIONS.find((item) => item.key === rule.key)?.whyItMayHelp ?? "The difference may warrant inspection.",
@@ -254,8 +322,8 @@ function evaluateScalar(rule: ScalarRule, target: ComparableAnalysis, competitor
     advantages.push({
       advantageId: rule.advantageId,
       metric: rule.key,
-      targetEvidence: [metricEvidence(target, rule.key, targetValue)],
-      competitorEvidence: competitorEvidence(competitors, rule.key, competitorValues),
+      targetEvidence: metricEvidence(target, rule.key, targetValue),
+      competitorEvidence: competitorEvidence(competitors, competitorSites, rule.key, competitorValues, (value) => value === relevant),
       whatDiffers: `Target ${rule.key} is ${targetValue}; the relevant competitor benchmark is ${relevant}.`,
       interpretation: "This is an observed target advantage for this metric only; it does not prove ranking or citation eligibility.",
       delta: {
@@ -269,12 +337,12 @@ function evaluateScalar(rule: ScalarRule, target: ComparableAnalysis, competitor
   }
 }
 
-function evaluateBooleanDifference(gapId: string, advantageId: string, metric: ComparisonMetricKey, target: ComparableAnalysis, competitors: ComparableAnalysis[], targetValue: boolean, competitorValues: boolean[], gaps: ComparisonGap[], advantages: TargetAdvantage[], implementation: string, verification: string, priority: ComparisonGap["priority"]): void {
+function evaluateBooleanDifference(gapId: string, advantageId: string, metric: ComparisonMetricKey, target: ComparableAnalysis, competitors: ComparableAnalysis[], competitorSites: ComparisonSite[], targetValue: boolean, competitorValues: boolean[], gaps: ComparisonGap[], advantages: TargetAdvantage[], implementation: string, verification: string, priority: ComparisonGap["priority"]): void {
   if (!targetValue && competitorValues.some(Boolean)) gaps.push({
     gapId,
     metric,
-    targetEvidence: [metricEvidence(target, metric, targetValue)],
-    competitorEvidence: competitorEvidence(competitors, metric, competitorValues),
+    targetEvidence: metricEvidence(target, metric, targetValue),
+    competitorEvidence: competitorEvidence(competitors, competitorSites, metric, competitorValues, Boolean),
     whatDiffers: `The target does not show ${metric}; at least one competitor does.`,
     competitorObservation: "The competitor signal is an observed tactic, not evidence that it caused performance.",
     whyItMayMatter: METRIC_DEFINITIONS.find((item) => item.key === metric)?.whyItMayHelp ?? "The difference may warrant inspection.",
@@ -295,8 +363,8 @@ function evaluateBooleanDifference(gapId: string, advantageId: string, metric: C
     advantages.push({
       advantageId,
       metric,
-      targetEvidence: [metricEvidence(target, metric, targetValue)],
-      competitorEvidence: competitorEvidence(competitors, metric, competitorValues),
+      targetEvidence: metricEvidence(target, metric, targetValue),
+      competitorEvidence: competitorEvidence(competitors, competitorSites, metric, competitorValues, (value) => value === false),
       whatDiffers: `The target shows ${metric}; none of the compared competitors do.`,
       interpretation: "This is a transparent observed difference, not proof of ranking or citation eligibility.",
       delta: {
@@ -310,12 +378,21 @@ function evaluateBooleanDifference(gapId: string, advantageId: string, metric: C
   }
 }
 
-function createSetGap(id: string, metric: string, target: ComparableAnalysis, competitors: ComparableAnalysis[], missing: string[], implementation: string, verification: string): ComparisonGap {
+function createSetGap(id: string, metric: string, target: ComparableAnalysis, competitors: ComparableAnalysis[], competitorSites: ComparisonSite[], missing: string[], implementation: string, verification: string): ComparisonGap {
+  const targetValue = setMetricValue(target, metric);
+  const competitorValues = competitors.map((item) => setMetricValue(item, metric));
+  const normalizedMissing = new Set(missing.map(normalizePhrase));
   return {
     gapId: id,
     metric,
-    targetEvidence: [metricEvidence(target, metric, metric === "schemaTypes" ? target.schemaTypes : metric === "detectedQuestions" ? target.detectedQuestions : target.coverage)],
-    competitorEvidence: competitors.map((item) => ({ sourceUrl: item.finalUrl, evidence: [metricEvidence(item, metric, metric === "schemaTypes" ? item.schemaTypes : metric === "detectedQuestions" ? item.detectedQuestions : item.coverage)] })),
+    targetEvidence: metricEvidence(target, metric, targetValue),
+    competitorEvidence: competitorEvidence(
+      competitors,
+      competitorSites,
+      metric,
+      competitorValues,
+      (value) => Array.isArray(value) && value.some((item) => typeof item === "string" && normalizedMissing.has(normalizePhrase(item)))
+    ),
     whatDiffers: `Competitors contain observed values not present on the target: ${missing.join(", ")}.`,
     competitorObservation: "These values are research observations only, not instructions to copy a competitor or proof of causation.",
     whyItMayMatter: "The difference can reveal an evidence-coverage area worth validating against real user and business needs.",
@@ -323,16 +400,103 @@ function createSetGap(id: string, metric: string, target: ComparableAnalysis, co
     verificationMethod: verification,
     priority: "medium",
     effort: "medium",
-    caution: "Add only original, accurate, visible content and matching structured evidence."
+    caution: "Add only original, accurate, visible content and matching structured evidence.",
+    missingValues: [...missing]
   };
 }
 
-function metricEvidence(analysis: ComparableAnalysis, field: string, observedValue: unknown): Evidence {
-  return { sourceUrl: analysis.finalUrl, field, observedValue, fetchedAt: analysis.fetchedAt };
+function metricEvidence(analysis: ComparableAnalysis, field: string, observedValue: unknown): Evidence[] {
+  const primary: Evidence = {
+    sourceUrl: analysis.finalUrl,
+    field,
+    observedValue,
+    fetchedAt: analysis.fetchedAt,
+    ...selectorAndSnippet(analysis, field)
+  };
+  const supplemental: Evidence[] = [];
+  if (field === "questionCount" || field === "detectedQuestions") {
+    supplemental.push(...analysis.detectedQuestions.map((question, index) => ({
+      sourceUrl: analysis.finalUrl,
+      field: `detectedQuestions[${index}]`,
+      observedValue: question,
+      snippet: question,
+      fetchedAt: analysis.fetchedAt
+    })));
+  }
+  if (field === "directAnswerCount") {
+    supplemental.push(...analysis.directAnswers.map((answer, index) => ({
+      sourceUrl: analysis.finalUrl,
+      field: `directAnswers[${index}]`,
+      observedValue: answer,
+      fetchedAt: analysis.fetchedAt
+    })));
+  }
+  if (["topicTermCount", "serviceTermCount", "locationTermCount", "hasIdentitySignals", "hasTrustSignals", "hasContactSignals", "hasLocationSignals", "topicTerms"].includes(field)) {
+    supplemental.push(...coverageDimensionsForField(analysis, field).flatMap((dimension) => dimension.signals.map((signal) => ({
+      sourceUrl: analysis.finalUrl,
+      field: signal.sourceField,
+      observedValue: signal.term,
+      fetchedAt: analysis.fetchedAt,
+      ...(signal.selector ? { selector: signal.selector } : {}),
+      ...(signal.snippet ? { snippet: signal.snippet } : {})
+    }))));
+  }
+  return [primary, ...supplemental];
 }
 
-function competitorEvidence(competitors: ComparableAnalysis[], field: string, values: unknown[]): CompetitorEvidence[] {
-  return competitors.map((item, index) => ({ sourceUrl: item.finalUrl, evidence: [metricEvidence(item, field, values[index])] }));
+function coverageDimensionsForField(
+  analysis: ComparableAnalysis,
+  field: string
+): Array<ComparableAnalysis["coverage"][keyof ComparableAnalysis["coverage"]]> {
+  if (field === "serviceTermCount") return [analysis.coverage.service];
+  if (field === "locationTermCount" || field === "hasLocationSignals") return [analysis.coverage.location];
+  if (field === "hasIdentitySignals") return [analysis.coverage.entity];
+  if (field === "hasTrustSignals") return [analysis.coverage.trust];
+  if (field === "hasContactSignals") return [analysis.coverage.contact];
+  return [
+    analysis.coverage.contentSection,
+    analysis.coverage.service,
+    analysis.coverage.entity,
+    analysis.coverage.location
+  ];
+}
+
+function competitorEvidence(
+  competitors: ComparableAnalysis[],
+  sites: ComparisonSite[],
+  field: string,
+  values: unknown[],
+  isBenchmark: (value: unknown) => boolean
+): CompetitorEvidence[] {
+  return competitors.map((item, index) => ({
+    sourceUrl: item.finalUrl,
+    normalizedUrl: sites[index]?.normalizedUrl ?? item.normalizedUrl,
+    inputOrder: sites[index]?.inputOrder ?? index + 1,
+    observedValue: values[index],
+    benchmark: isBenchmark(values[index]),
+    evidence: metricEvidence(item, field, values[index])
+  }));
+}
+
+function setMetricValue(analysis: ComparableAnalysis, metric: string): string[] {
+  if (metric === "schemaTypes") return [...analysis.schemaTypes];
+  if (metric === "detectedQuestions") return [...analysis.detectedQuestions];
+  return topicTerms(analysis);
+}
+
+function selectorAndSnippet(analysis: ComparableAnalysis, field: string): Pick<Evidence, "selector" | "snippet"> {
+  if (["hasTitle", "titleLength"].includes(field)) return { selector: "title", ...(analysis.title ? { snippet: analysis.title } : {}) };
+  if (["hasMetaDescription", "descriptionLength"].includes(field)) return { selector: 'meta[name="description"]', ...(analysis.metaDescription ? { snippet: analysis.metaDescription } : {}) };
+  if (["canonicalMatches", "canonicalStatus"].includes(field)) return { selector: 'link[rel="canonical"]', ...(analysis.canonicalUrl ? { snippet: analysis.canonicalUrl } : {}) };
+  if (["hasLanguage", "documentLanguage"].includes(field)) return { selector: "html" };
+  if (field === "viewportPresent") return { selector: 'meta[name="viewport"]' };
+  if (["h1Count", "h1StructureValid"].includes(field)) return { selector: "h1", ...(analysis.h1Text.length ? { snippet: analysis.h1Text.join(" | ").slice(0, 300) } : {}) };
+  if (["totalHeadingCount", "headingJumpCount", "emptyHeadingCount", "repeatedHeadingCount"].includes(field)) return { selector: "h1, h2, h3, h4, h5, h6", ...(analysis.headingHierarchy.length ? { snippet: analysis.headingHierarchy.map((item) => item.text).filter(Boolean).slice(0, 6).join(" | ").slice(0, 300) } : {}) };
+  if (["wordCount", "questionCount", "faqIndicatorCount", "directAnswerCount", "topicTermCount", "serviceTermCount", "locationTermCount", "topicTerms", "detectedQuestions"].includes(field)) return { selector: "body", ...(analysis.visibleText ? { snippet: analysis.visibleText.slice(0, 300) } : {}) };
+  if (["schemaTypeCount", "jsonLdParseErrorCount", "schemaTypes"].includes(field)) return { selector: 'script[type="application/ld+json"]' };
+  if (["internalLinkCount", "externalLinkCount", "uniqueInternalUrlCount", "uniqueExternalDomainCount", "emptyAnchorCount"].includes(field)) return { selector: "a[href]" };
+  if (["imageCount", "imagesMissingAltCount"].includes(field)) return { selector: "img" };
+  return {};
 }
 
 function findRank(observations: ManualRankObservations | undefined, analysis: ComparableAnalysis): number | null {

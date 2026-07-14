@@ -62,4 +62,37 @@ describe("compareAndSaveRun", () => {
     ]));
     expect((await store.list()).map((run) => run.id)).toEqual([second.id, first.id]);
   });
+
+  it("reassembles parallel analyses in submitted target-first order and persists stable identities", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "ai-visibility-compare-order-"));
+    const store = new JsonRunStore(join(directory, "runs.json"));
+    const input = {
+      targetUrl: "https://target.example/",
+      competitorUrls: [
+        "https://zeta.example/",
+        "https://alpha.example/",
+        "https://middle.example/"
+      ]
+    };
+    const pending = new Map<string, (analysis: AnalysisResult) => void>();
+    const analyze = vi.fn((url: string) => new Promise<AnalysisResult>((resolve) => {
+      pending.set(url, resolve);
+    }));
+
+    const runPromise = compareAndSaveRun(input, { store, analyze });
+    expect(analyze).toHaveBeenCalledTimes(4);
+    for (const url of [input.competitorUrls[1]!, input.competitorUrls[2]!, input.targetUrl, input.competitorUrls[0]!]) {
+      pending.get(url)!(makeAnalysis(new URL(url).toString()) as unknown as AnalysisResult);
+    }
+
+    const run = await runPromise;
+    const expectedOrder = [input.targetUrl, ...input.competitorUrls].map((url) => new URL(url).toString());
+    expect(run.analyses.map((analysis) => analysis.normalizedUrl)).toEqual(expectedOrder);
+    expect(run.sites.map((site) => site.normalizedUrl)).toEqual(expectedOrder);
+    expect(run.sites.map((site) => site.inputOrder)).toEqual([0, 1, 2, 3]);
+    expect(run.sites.map((site) => site.role)).toEqual(["target", "competitor", "competitor", "competitor"]);
+    expect(run.comparison.matrix.map((row) => row.url)).toEqual(expectedOrder);
+    expect(run.competitorUrls).toEqual(expectedOrder.slice(1));
+    expect((await store.get(run.id))?.sites.map((site) => site.normalizedUrl)).toEqual(expectedOrder);
+  });
 });

@@ -1,4 +1,4 @@
-import type { ComparableAnalysis, ComparisonResult, ManualRankObservations } from "../comparison/types.js";
+import type { ComparableAnalysis, ComparisonResult, ComparisonSite, ManualRankObservations } from "../comparison/types.js";
 import type { HistoricalComparison } from "../comparison/diff.js";
 
 export const STORAGE_SCHEMA_VERSION = "1" as const;
@@ -11,6 +11,7 @@ export interface RunRecord {
   applicationVersion: string;
   targetUrl: string;
   competitorUrls: string[];
+  sites: ComparisonSite[];
   queryLabel: string | null;
   rankObservations: ManualRankObservations;
   analyses: ComparableAnalysis[];
@@ -28,6 +29,7 @@ export interface RunSummary {
   createdAt: string;
   targetUrl: string;
   competitorUrls: string[];
+  sites: ComparisonSite[];
   queryLabel: string | null;
   findingCount: number;
   gapCount: number;

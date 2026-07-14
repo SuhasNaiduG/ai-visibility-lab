@@ -56,6 +56,7 @@ export interface ComparableAnalysis {
   headingLevelJumps: unknown[];
   emptyHeadingCount: number;
   repeatedHeadings: unknown[];
+  visibleText: string;
   wordCount: number;
   sentenceCount: number;
   questionCount: number;
@@ -97,6 +98,42 @@ export interface ComparableAnalysis {
 }
 
 export type ComparisonRole = "target" | "competitor";
+
+export type ComparisonEligibilityStatus = "eligible" | "degraded" | "ineligible";
+
+export type ComparisonEligibilityReasonCode =
+  | "NON_SUCCESS_HTTP"
+  | "ACCESS_DENIED"
+  | "BOT_CHALLENGE"
+  | "CAPTCHA"
+  | "SECURITY_CHECK"
+  | "ERROR_PAGE"
+  | "EMPTY_CONTENT"
+  | "NEAR_EMPTY_CONTENT"
+  | "MISSING_PAGE_EVIDENCE";
+
+export interface ComparisonEligibilityReason {
+  code: ComparisonEligibilityReasonCode;
+  message: string;
+  evidence: Evidence[];
+}
+
+export interface ComparisonEligibility {
+  status: ComparisonEligibilityStatus;
+  usableAsBenchmark: boolean;
+  reasons: ComparisonEligibilityReason[];
+}
+
+export interface ComparisonSite {
+  role: ComparisonRole;
+  inputOrder: number;
+  inputUrl: string;
+  normalizedUrl: string;
+  finalUrl: string;
+  eligibility: ComparisonEligibility;
+}
+
+export type ComparisonSiteInput = Omit<ComparisonSite, "finalUrl" | "eligibility">;
 
 export interface ComparisonMetrics {
   statusCode: number;
@@ -156,8 +193,11 @@ export interface MetricDefinition {
 
 export interface ComparisonRow {
   role: ComparisonRole;
+  inputOrder: number;
+  inputUrl: string;
   url: string;
   finalUrl: string;
+  eligibility: ComparisonEligibility;
   manualRankObservation: number | null;
   metrics: ComparisonMetrics;
   schemaTypes: string[];
@@ -167,6 +207,10 @@ export interface ComparisonRow {
 
 export interface CompetitorEvidence {
   sourceUrl: string;
+  normalizedUrl?: string;
+  inputOrder?: number;
+  observedValue?: unknown;
+  benchmark?: boolean;
   evidence: Evidence[];
 }
 
@@ -195,6 +239,7 @@ export interface ComparisonGap {
   priority: Priority;
   effort: Effort;
   caution: string;
+  missingValues?: string[];
   /** Present for scalar and boolean comparisons; absent on set-difference gaps. */
   delta?: ComparisonDelta;
 }
@@ -213,6 +258,10 @@ export interface TargetAdvantage {
 export interface ComparisonResult {
   targetUrl: string;
   competitorUrls: string[];
+  sites: ComparisonSite[];
+  conclusionStatus: "complete" | "partial" | "unavailable";
+  incompleteMessage: string | null;
+  excludedCompetitorUrls: string[];
   queryLabel: string | null;
   metricDefinitions: MetricDefinition[];
   matrix: ComparisonRow[];

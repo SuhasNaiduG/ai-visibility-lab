@@ -66,8 +66,9 @@ function jsonDetails(value, label = "Raw JSON evidence") {
   return element("details", {}, [element("summary", { text: label }), element("pre", { text: JSON.stringify(value, null, 2) })]);
 }
 
-function section(title, contents) {
-  return element("section", { className: "section-card" }, [element("h3", { text: title }), ...(Array.isArray(contents) ? contents : [contents])]);
+function section(title, contents, options = {}) {
+  const className = ["section-card", options.className].filter(Boolean).join(" ");
+  return element("section", { className, attributes: options.attributes }, [element("h3", { text: title }), ...(Array.isArray(contents) ? contents : [contents])]);
 }
 
 function renderFindings(findings = []) {
@@ -127,15 +128,420 @@ function renderAnalysis(result, container) {
   container.append(jsonDetails(result));
 }
 
-function renderGaps(gaps = []) {
+function eligibilityStatus(value) {
+  return ["eligible", "degraded", "ineligible"].includes(value) ? value : "eligible";
+}
+
+function eligibilityFor(site, row) {
+  const supplied = site?.eligibility ?? row?.eligibility;
+  if (supplied) return { ...supplied, status: eligibilityStatus(supplied.status) };
+  const statusCode = row?.metrics?.statusCode;
+  const usable = typeof statusCode !== "number" || (statusCode >= 200 && statusCode < 300);
+  return {
+    status: usable ? "eligible" : "ineligible",
+    usableAsBenchmark: usable,
+    reasons: usable ? [] : [{ code: "NON_SUCCESS_HTTP", message: `The page returned HTTP ${statusCode}.`, evidence: [] }]
+  };
+}
+
+function eligibilityBadge(eligibility) {
+  const status = eligibilityStatus(eligibility?.status);
+  return element("span", { className: `eligibility-badge ${status}`, text: status[0].toUpperCase() + status.slice(1) });
+}
+
+function matrixRowForSite(matrix, site, fallbackIndex) {
+  return matrix.find((row) => row.inputOrder === site.inputOrder && row.role === site.role)
+    ?? matrix.find((row) => row.url === site.normalizedUrl && row.role === site.role)
+    ?? matrix.find((row) => row.finalUrl === site.finalUrl && row.role === site.role)
+    ?? matrix[fallbackIndex];
+}
+
+function orderedComparisonSites(comparison) {
+  const matrix = comparison.matrix ?? [];
+  const supplied = comparison.sites?.length
+    ? comparison.sites
+    : matrix.map((row, index) => ({
+        role: row.role,
+        inputOrder: row.inputOrder ?? index,
+        inputUrl: row.inputUrl ?? row.url,
+        normalizedUrl: row.url,
+        finalUrl: row.finalUrl,
+        eligibility: row.eligibility
+      }));
+  const ordered = [
+    ...supplied.filter((site) => site.role === "target"),
+    ...supplied.filter((site) => site.role !== "target")
+  ];
+  let competitorNumber = 0;
+  return ordered.map((site, index) => {
+    const row = matrixRowForSite(matrix, site, index);
+    const label = site.role === "target" ? "Target" : `Competitor ${++competitorNumber}`;
+    return { site, row, label, eligibility: eligibilityFor(site, row) };
+  });
+}
+
+function renderSiteEligibility(siteEntries) {
+  const grid = element("div", { className: "comparison-sites" });
+  for (const entry of siteEntries) {
+    const status = eligibilityStatus(entry.eligibility.status);
+    const reasons = entry.eligibility.reasons ?? [];
+    const reasonList = reasons.length
+      ? element("ul", { className: "eligibility-reasons" }, reasons.map((reason) => element("li", {}, [
+          element("span", { className: "reason-code", text: reason.code }),
+          document.createTextNode(reason.message ? ` ${reason.message}` : "")
+        ])))
+      : element("p", { className: "eligibility-use", text: "Usable as a competitive benchmark." });
+    grid.append(element("article", { className: `comparison-site eligibility-${status}` }, [
+      element("div", { className: "site-card-heading" }, [element("h4", { text: entry.label }), eligibilityBadge(entry.eligibility)]),
+      labelled("Submitted URL", entry.site.inputUrl ?? entry.site.normalizedUrl),
+      labelled("Final URL", entry.site.finalUrl ?? entry.row?.finalUrl),
+      element("p", {
+        className: `eligibility-use ${entry.eligibility.usableAsBenchmark ? "included" : "excluded"}`,
+        text: entry.eligibility.usableAsBenchmark ? "Included in competitive conclusions." : "Excluded from competitive conclusions."
+      }),
+      reasonList
+    ]));
+  }
+  return grid;
+}
+
+function renderComparisonMatrix(comparison, siteEntries) {
+  const definitions = new Map((comparison.metricDefinitions ?? []).map((item) => [item.key, item]));
+  const metricKeys = comparison.metricDefinitions?.length
+    ? comparison.metricDefinitions.map((item) => item.key)
+    : Object.keys(siteEntries[0]?.row?.metrics ?? {});
+  const head = element("thead");
+  const headRow = element("tr");
+  headRow.append(element("th", { text: "Metric", attributes: { scope: "col" } }));
+  for (const entry of siteEntries) {
+    const status = eligibilityStatus(entry.eligibility.status);
+    headRow.append(element("th", { className: `comparison-column eligibility-${status}`, attributes: { scope: "col" } }, [
+      element("div", { className: "matrix-site-heading" }, [element("span", { text: entry.label }), eligibilityBadge(entry.eligibility)]),
+      element("span", { className: "matrix-url", text: entry.site.normalizedUrl ?? entry.row?.url })
+    ]));
+  }
+  head.append(headRow);
+  const body = element("tbody");
+  const appendRow = (label, values) => {
+    const row = element("tr");
+    row.append(element("th", { text: label, attributes: { scope: "row" } }));
+    values.forEach((value, index) => {
+      const status = eligibilityStatus(siteEntries[index]?.eligibility.status);
+      row.append(element("td", { className: `comparison-column eligibility-${status}`, text: valueOrDash(value) }));
+    });
+    body.append(row);
+  };
+  appendRow("Manual rank observation (user supplied)", siteEntries.map((entry) => entry.row?.manualRankObservation));
+  for (const key of metricKeys) {
+    appendRow(definitions.get(key)?.label ?? key, siteEntries.map((entry) => entry.row?.metrics?.[key]));
+  }
+  return element("div", { className: "table-wrap comparison-matrix" }, element("table", {}, [head, body]));
+}
+
+function evidenceValue(value) {
+  if (value !== null && typeof value === "object") {
+    return element("pre", { className: "evidence-value", text: JSON.stringify(value, null, 2) });
+  }
+  return element("span", { className: "evidence-value scalar", text: valueOrDash(value) });
+}
+
+function evidenceRecord(item) {
+  return element("article", { className: "evidence-record" }, [
+    element("div", { className: "evidence-record-grid" }, [
+      labelled("Selector or field", item.selector || item.field),
+      labelled("Fetched", formatTime(item.fetchedAt)),
+      labelled("Snippet", item.snippet || "Not recorded")
+    ]),
+    element("div", { className: "evidence-record-value" }, [element("strong", { text: "Evidence" }), evidenceValue(item.observedValue)])
+  ]);
+}
+
+function evidencePanel(entry, bundle, options = {}) {
+  const eligibility = entry?.eligibility ?? { status: "eligible", usableAsBenchmark: true, reasons: [] };
+  const status = eligibilityStatus(eligibility.status);
+  const evidence = bundle?.evidence ?? [];
+  const sourceUrl = bundle?.sourceUrl ?? evidence[0]?.sourceUrl ?? entry?.site?.finalUrl;
+  const observedValue = bundle?.observedValue ?? evidence[0]?.observedValue;
+  const headerItems = [element("h4", { text: entry?.label ?? options.label ?? "Competitor" }), eligibilityBadge(eligibility)];
+  if (bundle?.benchmark) headerItems.push(element("span", { className: "benchmark-badge", text: "Benchmark" }));
+  if (!eligibility.usableAsBenchmark) {
+    return element("article", { className: `gap-evidence-panel eligibility-${status} conclusion-excluded` }, [
+      element("div", { className: "evidence-panel-heading" }, headerItems),
+      labelled("URL", sourceUrl),
+      element("p", { className: "excluded-message", text: "Excluded from competitive conclusions. Raw retrieval evidence remains available above." })
+    ]);
+  }
+  if (!bundle) {
+    return element("article", { className: `gap-evidence-panel eligibility-${status} evidence-missing` }, [
+      element("div", { className: "evidence-panel-heading" }, headerItems),
+      labelled("URL", sourceUrl),
+      element("p", { className: "missing-evidence-message", text: "No aligned comparison evidence was supplied for this eligible site. Review its raw retrieval evidence before using this conclusion." })
+    ]);
+  }
+  return element("article", { className: `gap-evidence-panel eligibility-${status}` }, [
+    element("div", { className: "evidence-panel-heading" }, headerItems),
+    labelled("URL", sourceUrl),
+    element("div", { className: "observed-value" }, [element("strong", { text: "Observed value" }), evidenceValue(observedValue)]),
+    element("div", { className: "evidence-records" }, evidence.length
+      ? evidence.map(evidenceRecord)
+      : [element("p", { className: "empty compact", text: "No structured evidence was supplied for this value." })])
+  ]);
+}
+
+function competitorBundleForSite(bundles, site, used) {
+  const match = bundles.find((bundle, index) => !used.has(index) && (
+    (bundle.inputOrder !== undefined && bundle.inputOrder === site.inputOrder)
+    || (bundle.normalizedUrl && bundle.normalizedUrl === site.normalizedUrl)
+    || (bundle.sourceUrl && bundle.sourceUrl === site.finalUrl)
+  ));
+  if (!match) return null;
+  used.add(bundles.indexOf(match));
+  return match;
+}
+
+function renderGapEvidence(gap, siteEntries) {
+  const grid = element("div", { className: "gap-evidence-grid" });
+  const target = siteEntries.find((entry) => entry.site.role === "target") ?? { label: "Target", eligibility: { status: "eligible", usableAsBenchmark: true, reasons: [] }, site: {} };
+  grid.append(evidencePanel(target, {
+    sourceUrl: gap.targetEvidence?.[0]?.sourceUrl ?? target.site.finalUrl,
+    observedValue: gap.targetEvidence?.[0]?.observedValue,
+    evidence: gap.targetEvidence ?? []
+  }));
+  const bundles = gap.competitorEvidence ?? [];
+  const used = new Set();
+  const competitors = siteEntries.filter((entry) => entry.site.role !== "target");
+  for (const entry of competitors) {
+    grid.append(evidencePanel(entry, competitorBundleForSite(bundles, entry.site, used)));
+  }
+  bundles.forEach((bundle, index) => {
+    if (!used.has(index)) grid.append(evidencePanel(null, bundle, { label: `Competitor ${index + 1}` }));
+  });
+  return grid;
+}
+
+function renderGapDifference(gap) {
+  if (gap.delta) {
+    return metricCards([
+      ["Target value", gap.delta.targetValue],
+      ["Benchmark value", gap.delta.benchmarkValue],
+      ["Difference", gap.delta.difference],
+      ["Threshold", gap.delta.threshold],
+      ["Interpretation", gap.delta.interpretation]
+    ]);
+  }
+  if (gap.missingValues?.length) return metricCards([["Competitor-only values", gap.missingValues]]);
+  return null;
+}
+
+function renderGaps(gaps = [], siteEntries = [], definitions = new Map()) {
   if (!gaps.length) return element("p", { className: "empty", text: "No target gaps met the transparent comparison thresholds." });
   const list = element("div", { className: "gap-list" });
   for (const gap of gaps) {
+    const metricLabel = definitions.get(gap.metric)?.label ?? gap.metric;
+    const delta = renderGapDifference(gap);
     list.append(element("article", { className: `gap ${gap.priority ?? ""}` }, [
-      element("div", { className: "tags" }, [gap.gapId, gap.metric, gap.priority, gap.effort].filter(Boolean).map((tag) => element("span", { className: "tag", text: tag }))),
-      element("h3", { text: gap.whatDiffers }),
-      element("div", { className: "detail-grid" }, [labelled("Competitor observation", gap.competitorObservation), labelled("Why it may matter", gap.whyItMayMatter), labelled("Implementation direction", gap.implementationDirection), labelled("Verification", gap.verificationMethod), labelled("Caution", gap.caution)]),
-      jsonDetails({ delta: gap.delta, targetEvidence: gap.targetEvidence, competitorEvidence: gap.competitorEvidence }, "Comparison evidence")
+      element("div", { className: "tags" }, [gap.gapId, metricLabel, `Priority: ${gap.priority}`, `Effort: ${gap.effort}`].filter(Boolean).map((tag) => element("span", { className: "tag", text: tag }))),
+      element("h3", { text: metricLabel }),
+      element("div", { className: "detail-grid gap-explanation" }, [
+        labelled("Difference", gap.whatDiffers),
+        labelled("Explanation", gap.whyItMayMatter),
+        labelled("Implementation", gap.implementationDirection),
+        labelled("Verification", gap.verificationMethod),
+        labelled("Priority", gap.priority),
+        labelled("Effort", gap.effort)
+      ]),
+      delta,
+      element("div", { className: "causation-limitation" }, [
+        element("strong", { text: "Causation limitation" }),
+        element("p", { text: gap.competitorObservation }),
+        element("p", { text: gap.caution })
+      ]),
+      element("h4", { className: "evidence-heading", text: "Target and competitor evidence" }),
+      renderGapEvidence(gap, siteEntries),
+      jsonDetails({ delta: gap.delta, missingValues: gap.missingValues, targetEvidence: gap.targetEvidence, competitorEvidence: gap.competitorEvidence }, "Raw comparison evidence")
+    ].filter(Boolean)));
+  }
+  return list;
+}
+
+function renderAdvantages(advantages = [], siteEntries = [], definitions = new Map()) {
+  if (!advantages.length) return element("p", { className: "empty", text: "No target advantages met the transparent comparison thresholds." });
+  const list = element("div", { className: "gap-list advantage-list" });
+  for (const advantage of advantages) {
+    const metricLabel = definitions.get(advantage.metric)?.label ?? advantage.metric;
+    const delta = renderGapDifference(advantage);
+    list.append(element("article", { className: "gap advantage" }, [
+      element("div", { className: "tags" }, [advantage.advantageId, metricLabel].filter(Boolean).map((tag) => element("span", { className: "tag", text: tag }))),
+      element("h3", { text: metricLabel }),
+      element("div", { className: "detail-grid gap-explanation" }, [
+        labelled("Difference", advantage.whatDiffers),
+        labelled("Interpretation", advantage.interpretation)
+      ]),
+      delta,
+      element("h4", { className: "evidence-heading", text: "Target and competitor evidence" }),
+      renderGapEvidence(advantage, siteEntries),
+      jsonDetails({ delta: advantage.delta, targetEvidence: advantage.targetEvidence, competitorEvidence: advantage.competitorEvidence }, "Raw comparison evidence")
+    ].filter(Boolean)));
+  }
+  return list;
+}
+
+function analysisForSite(run, entry) {
+  const analyses = run.analyses ?? [];
+  const direct = analyses[entry.site.inputOrder];
+  if (direct && (direct.normalizedUrl === entry.site.normalizedUrl || direct.finalUrl === entry.site.finalUrl)) return direct;
+  return analyses.find((analysis) => analysis.normalizedUrl === entry.site.normalizedUrl)
+    ?? analyses.find((analysis) => analysis.finalUrl === entry.site.finalUrl)
+    ?? direct;
+}
+
+function rawRetrievalEvidence(run, entry) {
+  const analysis = analysisForSite(run, entry);
+  return {
+    site: {
+      role: entry.site.role,
+      inputOrder: entry.site.inputOrder,
+      inputUrl: entry.site.inputUrl,
+      normalizedUrl: entry.site.normalizedUrl,
+      finalUrl: entry.site.finalUrl
+    },
+    eligibility: entry.eligibility,
+    retrieval: analysis ? {
+      requestedUrl: analysis.requestedUrl,
+      normalizedUrl: analysis.normalizedUrl,
+      statusCode: analysis.statusCode,
+      finalUrl: analysis.finalUrl,
+      responseTimeMs: analysis.responseTimeMs,
+      fetchedAt: analysis.fetchedAt,
+      redirectCount: analysis.redirectCount,
+      redirectChain: analysis.redirectChain ?? [],
+      networkChecks: analysis.networkChecks ?? [],
+      robotsTxtUrl: analysis.robotsTxtUrl,
+      sitemapXmlUrl: analysis.sitemapXmlUrl,
+      siteResources: analysis.siteResources,
+      rawEvidence: analysis.rawEvidence ?? []
+    } : {
+      statusCode: entry.row?.metrics?.statusCode,
+      finalUrl: entry.row?.finalUrl,
+      evidenceAvailable: false
+    }
+  };
+}
+
+function renderRawRetrieval(run, siteEntries) {
+  const list = element("div", { className: "raw-retrieval-list" });
+  for (const entry of siteEntries) {
+    const details = element("details", { className: "raw-retrieval" }, [
+      element("summary", {}, [element("span", { text: `${entry.label} raw retrieval evidence` }), eligibilityBadge(entry.eligibility)]),
+      element("pre", { text: JSON.stringify(rawRetrievalEvidence(run, entry), null, 2) })
+    ]);
+    list.append(details);
+  }
+  return list;
+}
+
+function disabledConclusion(message = "Competitive conclusions were not calculated from ineligible evidence.") {
+  return element("p", { className: "conclusion-disabled-message", text: message });
+}
+
+function historyChanges(history) {
+  return [
+    ...(history.technicalChanges ?? []),
+    ...(history.metadataChanges ?? []),
+    ...(history.schemaChanges ?? []),
+    ...(history.headingChanges ?? []),
+    ...(history.contentCountChanges ?? []),
+    ...(history.linkAndMediaChanges ?? [])
+  ];
+}
+
+function legacySourceMatches(change, entry, siteEntries) {
+  const sources = [change.sourceUrl, change.currentSourceUrl, change.previousSourceUrl].filter(Boolean);
+  const matches = siteEntries.filter((candidate) => sources.includes(candidate.site.finalUrl) || sources.includes(candidate.site.normalizedUrl));
+  return matches.length === 1 && matches[0] === entry;
+}
+
+function changeMatchesSite(change, entry, siteEntries) {
+  if (change.siteKey) return change.siteKey === entry.site.normalizedUrl;
+  if (change.inputOrder !== undefined) return change.inputOrder === entry.site.inputOrder;
+  return legacySourceMatches(change, entry, siteEntries);
+}
+
+function findingMatchesSite(change, entry, siteEntries) {
+  if (change.siteKey) return change.siteKey === entry.site.normalizedUrl;
+  if (change.inputOrder !== undefined) return change.inputOrder === entry.site.inputOrder;
+  return legacySourceMatches(change, entry, siteEntries);
+}
+
+function renderHistorySideBySide(history, siteEntries) {
+  const allChanges = historyChanges(history);
+  const findingChanges = history.findingChanges ?? [];
+  const list = element("div", { className: "history-site-list" });
+  const renderedChanges = new Set();
+  const renderedFindingChanges = new Set();
+  for (const entry of siteEntries) {
+    const changes = allChanges.filter((change) => changeMatchesSite(change, entry, siteEntries));
+    changes.forEach((change) => renderedChanges.add(change));
+    const findings = findingChanges.find((change) => findingMatchesSite(change, entry, siteEntries));
+    if (findings) renderedFindingChanges.add(findings);
+    const content = [];
+    if (changes.length) {
+      content.push(table(
+        ["Field", "Previous value", "Current value", "Observed change"],
+        changes.map((change) => [change.field, change.previousValue, change.currentValue, change.change])
+      ));
+    } else {
+      content.push(element("p", { className: "empty compact", text: "No tracked previous/current value changed for this website." }));
+    }
+    if (findings) {
+      content.push(table(["Finding state", "Stable rule IDs"], [
+        ["New", findings.newRuleIds],
+        ["Resolved", findings.resolvedRuleIds],
+        ["Unchanged", findings.unchangedRuleIds],
+        ["Indeterminate", findings.indeterminateRuleIds]
+      ]));
+    }
+    list.append(element("article", { className: "history-site" }, [
+      element("div", { className: "site-card-heading" }, [
+        element("h4", { text: `${entry.label}: ${entry.site.normalizedUrl}` }),
+        eligibilityBadge(entry.eligibility)
+      ]),
+      ...content
+    ]));
+  }
+
+  const unmatchedChanges = allChanges.filter((change) => !renderedChanges.has(change));
+  const unmatchedFindings = findingChanges.filter((change) => !renderedFindingChanges.has(change));
+  if (unmatchedChanges.length || unmatchedFindings.length) {
+    list.append(element("article", { className: "history-site history-unmatched" }, [
+      element("h4", { text: "Legacy changes with no unambiguous submitted-site identity" }),
+      element("p", { text: "These previous/current observations are preserved without assigning them to the wrong website." }),
+      ...(unmatchedChanges.length ? [table(
+        ["Source", "Field", "Previous value", "Current value"],
+        unmatchedChanges.map((change) => [change.sourceUrl, change.field, change.previousValue, change.currentValue])
+      )] : []),
+      ...(unmatchedFindings.length ? [jsonDetails(unmatchedFindings, "Unmatched finding changes")] : [])
+    ]));
+  }
+
+  const competitorChanges = history.competitorChanges ?? {};
+  const ordering = competitorChanges.ordering;
+  if ((competitorChanges.addedUrls?.length ?? 0) || (competitorChanges.removedUrls?.length ?? 0) || ordering) {
+    const orderRows = ordering
+      ? Array.from({ length: Math.max(ordering.previousOrder?.length ?? 0, ordering.currentOrder?.length ?? 0) }, (_, index) => [
+          index + 1,
+          ordering.previousOrder?.[index],
+          ordering.currentOrder?.[index]
+        ])
+      : [];
+    list.append(element("article", { className: "history-site history-membership" }, [
+      element("h4", { text: "Competitor membership and order" }),
+      metricCards([
+        ["Added", competitorChanges.addedUrls ?? []],
+        ["Removed", competitorChanges.removedUrls ?? []],
+        ["Relative order changed", ordering?.orderChanged ?? "Not recorded"]
+      ]),
+      ...(orderRows.length ? [table(["Position", "Previous competitor", "Current competitor"], orderRows)] : [])
     ]));
   }
   return list;
@@ -144,28 +550,48 @@ function renderGaps(gaps = []) {
 function renderComparison(run, container) {
   clear(container);
   const comparison = run.comparison ?? run;
-  container.append(metricCards([
-    ["Saved run", run.id ?? run.runId], ["Created", formatTime(run.createdAt)], ["Sites", comparison.matrix?.length],
-    ["Target gaps", comparison.targetGaps?.length ?? 0], ["Target advantages", comparison.targetAdvantages?.length ?? 0], ["Prior matching run", run.history?.previousRunId ?? "None"]
-  ]));
+  const siteEntries = orderedComparisonSites(comparison);
+  const conclusionStatus = comparison.conclusionStatus ?? "complete";
+  const conclusionsUnavailable = conclusionStatus === "unavailable";
   const definitions = new Map((comparison.metricDefinitions ?? []).map((item) => [item.key, item]));
-  const metricKeys = comparison.matrix?.[0] ? Object.keys(comparison.matrix[0].metrics) : [];
-  const matrixRows = [
-    ["Manual rank observation (user supplied)", ...(comparison.matrix ?? []).map((row) => row.manualRankObservation)],
-    ...metricKeys.map((key) => [definitions.get(key)?.label ?? key, ...(comparison.matrix ?? []).map((row) => row.metrics[key])])
-  ];
+  container.append(metricCards([
+    ["Saved run", run.id ?? run.runId], ["Created", formatTime(run.createdAt)], ["Sites", siteEntries.length],
+    ["Conclusion status", conclusionStatus], ["Target gaps", comparison.targetGaps?.length ?? 0], ["Target advantages", comparison.targetAdvantages?.length ?? 0], ["Prior matching run", run.history?.previousRunId ?? "None"]
+  ]));
+  if (comparison.incompleteMessage) {
+    container.append(element("div", { className: "comparison-incomplete", text: comparison.incompleteMessage, attributes: { role: "status" } }));
+  }
+  container.append(section("Site eligibility and comparison use", renderSiteEligibility(siteEntries)));
   container.append(section("Normalized comparison matrix", [
-    table(["Metric", ...(comparison.matrix ?? []).map((row) => `${row.role}: ${row.url}`)], matrixRows),
+    renderComparisonMatrix(comparison, siteEntries),
     jsonDetails(comparison.metricDefinitions ?? [], "Metric explanations")
   ]));
-  container.append(section("Evidence-backed target gaps", renderGaps(comparison.targetGaps)));
-  container.append(section("Observed target advantages", comparison.targetAdvantages?.length ? table(["Metric", "Difference", "Interpretation"], comparison.targetAdvantages.map((item) => [item.metric, item.whatDiffers, item.interpretation])) : element("p", { className: "empty", text: "No target advantages met the transparent comparison thresholds." })));
-  container.append(section("Coverage differences", table(["Comparison", "Observed competitor-only values"], [
-    ["Schema types", comparison.competitorOnlySchemaTypes], ["Topics", comparison.competitorOnlyTopics], ["Questions", comparison.competitorOnlyQuestions]
-  ])));
+  container.append(section("Raw retrieval evidence", renderRawRetrieval(run, siteEntries), { className: "raw-retrieval-section" }));
+  container.append(section(
+    "Evidence-backed target gaps",
+    conclusionsUnavailable ? disabledConclusion() : renderGaps(comparison.targetGaps, siteEntries, definitions),
+    conclusionsUnavailable ? { className: "conclusion-section is-disabled", attributes: { "aria-disabled": "true" } } : { className: "conclusion-section" }
+  ));
+  container.append(section(
+    "Observed target advantages",
+    conclusionsUnavailable
+      ? disabledConclusion()
+      : renderAdvantages(comparison.targetAdvantages, siteEntries, definitions),
+    conclusionsUnavailable ? { className: "conclusion-section is-disabled", attributes: { "aria-disabled": "true" } } : { className: "conclusion-section" }
+  ));
+  container.append(section(
+    "Coverage differences",
+    conclusionsUnavailable
+      ? disabledConclusion()
+      : table(["Comparison", "Observed competitor-only values"], [
+          ["Schema types", comparison.competitorOnlySchemaTypes], ["Topics", comparison.competitorOnlyTopics], ["Questions", comparison.competitorOnlyQuestions]
+        ]),
+    conclusionsUnavailable ? { className: "conclusion-section is-disabled", attributes: { "aria-disabled": "true" } } : { className: "conclusion-section" }
+  ));
   if (run.history) container.append(section("Changes since the prior matching run", [
     metricCards([["Technical", run.history.technicalChanges?.length ?? 0], ["Metadata", run.history.metadataChanges?.length ?? 0], ["Schema", run.history.schemaChanges?.length ?? 0], ["Headings", run.history.headingChanges?.length ?? 0], ["Content", run.history.contentCountChanges?.length ?? 0], ["Links/media", run.history.linkAndMediaChanges?.length ?? 0]]),
     element("p", { text: run.history.correlationSummary?.interpretation }),
+    renderHistorySideBySide(run.history, siteEntries),
     jsonDetails(run.history, "Complete historical diff")
   ]));
   const limitations = element("ul", { className: "plain-list" }, (comparison.limitations ?? []).map((item) => element("li", { text: item })));

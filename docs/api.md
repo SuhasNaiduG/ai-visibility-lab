@@ -138,6 +138,25 @@ Validation rules:
 - `rankObservations` is optional. Keys must normalize to a submitted target or competitor and values must be integer positions from 1 through 1,000.
 - Rank observations are labeled manual; the MVP does not collect rankings automatically.
 
+The service creates one stable ordered identity for every submitted URL before analysis starts. The target is input order `0`; competitors remain in request order `1` through `3` even when parallel analysis promises resolve in another order. Each identity contains:
+
+```json
+{
+  "role": "competitor",
+  "inputOrder": 1,
+  "inputUrl": "https://competitor-one.example",
+  "normalizedUrl": "https://competitor-one.example/",
+  "finalUrl": "https://www.competitor-one.example/landing",
+  "eligibility": {
+    "status": "eligible",
+    "usableAsBenchmark": true,
+    "reasons": []
+  }
+}
+```
+
+`normalizedUrl` is the normalized submitted identity. `finalUrl` is retrieval evidence and may differ after redirects.
+
 The response is the saved `RunRecord`:
 
 | Field | Meaning |
@@ -147,13 +166,46 @@ The response is the saved `RunRecord`:
 | `schemaVersion` | Storage contract version, currently `1`. |
 | `applicationVersion` | Application version that wrote the record. |
 | `targetUrl`, `competitorUrls` | Normalized submitted site URLs. |
+| `sites` | Target-first ordered submitted identities, final URLs, and eligibility; persisted with the run. |
 | `queryLabel` | Trimmed label or `null`. |
 | `rankObservations` | Normalized manual observations, or an empty object. |
 | `analyses` | Complete target and competitor analysis results. |
-| `comparison` | Metric definitions, matrix rows, gaps, advantages, competitor-only sets, and limitations. |
-| `history` | Diff against the newest prior matching target run, or `null` for the first run. |
+| `comparison` | Ordered sites, conclusion availability, exclusions, metric definitions, matrix rows, side-by-side evidence, gaps, advantages, competitor-only sets, and limitations. |
+| `history` | Identity-aware diff against the newest prior normalized-submitted-target match, or `null` for the first run. |
 
 The comparison intentionally has no aggregate score. A gap or advantage is an observed delta, not a ranking or citation prediction.
+
+### Comparison eligibility and conclusion fields
+
+`comparison.sites` and every matrix row expose `eligibility.status` (`eligible`, `degraded`, or `ineligible`), `usableAsBenchmark`, and evidence-backed reasons. Stable reason codes are `NON_SUCCESS_HTTP`, `ACCESS_DENIED`, `BOT_CHALLENGE`, `CAPTCHA`, `SECURITY_CHECK`, `ERROR_PAGE`, `EMPTY_CONTENT`, `NEAR_EMPTY_CONTENT`, and `MISSING_PAGE_EVIDENCE`.
+
+The classifier treats transport and page usability separately. Non-2xx responses are ineligible. A 2xx response may also be ineligible when its title or bounded visible content is an access-denied, bot/CAPTCHA/security, or error response, or when extracted page evidence is empty/insufficient. Evidence-rich pages under 50 words and certain limited-evidence pages are `degraded` but remain usable.
+
+| Comparison field | Meaning |
+|---|---|
+| `conclusionStatus` | `complete` when every site is eligible; `partial` when usable conclusions remain but at least one site is degraded/ineligible; `unavailable` when the target or every competitor is unusable. |
+| `incompleteMessage` | The exact user-visible message below when any site is ineligible; otherwise `null`. |
+| `excludedCompetitorUrls` | Normalized submitted competitor identities retained as raw rows but excluded from all competitive conclusions. |
+
+The exact incomplete message is:
+
+> Comparison incomplete: this website did not return a usable page to the analyzer. Raw retrieval evidence is shown, but it was excluded from competitive conclusions.
+
+All sites remain in `comparison.sites`, `analyses`, and `comparison.matrix`. Ineligible competitors never contribute to scalar/boolean benchmarks, competitor-only sets, gaps, or advantages. If conclusions are `unavailable`, the gap, advantage, and competitor-only arrays are empty.
+
+### Gap and advantage evidence
+
+Every emitted gap/advantage contains non-empty `targetEvidence` and `competitorEvidence`. A competitor evidence bundle adds `normalizedUrl`, `inputOrder`, `observedValue`, `benchmark`, and nested `evidence` to the existing source URL. Nested records contain `sourceUrl`, `field`, `observedValue`, and `fetchedAt`, plus selector/snippet when available. `benchmark: true` identifies the competitor value that satisfies the relevant strongest/lowest/set-membership condition; other usable competitor values remain visible with `benchmark: false`.
+
+### History fields and semantics
+
+History matches the newest prior run by normalized submitted target URL, not by redirected final URL. Per-site changes add `siteKey`, `inputOrder`, `previousSourceUrl`, and `currentSourceUrl` so a final-URL change or competitor reorder does not cross-wire analyses.
+
+`history.competitorChanges.addedUrls` and `removedUrls` describe normalized identity membership. `history.competitorChanges.ordering` contains `previousOrder`, `currentOrder`, `orderChanged`, and `moves`. Reordering is calculated only across identities common to both runs; additions/removals alone do not set `orderChanged`.
+
+When either snapshot for a site is ineligible, only technical retrieval/eligibility changes are compared. Finding differences are placed in `indeterminateRuleIds` instead of `newRuleIds` or `resolvedRuleIds`. If either target snapshot is ineligible, `rankObservationChanges` is empty and `rankComparisonSkippedReason` is `Manual rank changes were not compared because target page eligibility made content correlation indeterminate.`
+
+These identity, eligibility, evidence, and history fields are additive fields on newly saved records and are runtime validated by the JSON store. Existing schema-version-1 local records that predate them are first validated against a bounded legacy shape and normalized from their submitted URL/analysis evidence. When the current comparison or history contract is absent, the store deterministically recomputes it with the current `compareAnalyses` and `diffRuns` behavior before checking identity alignment and validating the current contract. For current comparisons, matrix metrics, target and competitor evidence values, benchmark flags, gap/advantage IDs, missing values, and deltas must agree with a deterministic in-memory recomputation. Current histories must likewise agree with `diffRuns` for the referenced prior record, including observations, findings, membership/order, rank changes, skipped reason, and correlation summary. Current-contract records are preserved unchanged, and reads never rewrite the store. A record that cannot be normalized safely remains a store error; corruption is never silently accepted or overwritten.
 
 ## `GET /api/runs`
 
@@ -166,6 +218,24 @@ Lists saved comparison runs newest first. The response is an array of summaries:
     "createdAt": "2026-07-15T02:52:38.000Z",
     "targetUrl": "https://425clearaligners.com/",
     "competitorUrls": ["https://example.com/"],
+    "sites": [
+      {
+        "role": "target",
+        "inputOrder": 0,
+        "inputUrl": "https://425clearaligners.com",
+        "normalizedUrl": "https://425clearaligners.com/",
+        "finalUrl": "https://425clearaligners.com/",
+        "eligibility": { "status": "eligible", "usableAsBenchmark": true, "reasons": [] }
+      },
+      {
+        "role": "competitor",
+        "inputOrder": 1,
+        "inputUrl": "https://example.com",
+        "normalizedUrl": "https://example.com/",
+        "finalUrl": "https://example.com/",
+        "eligibility": { "status": "eligible", "usableAsBenchmark": true, "reasons": [] }
+      }
+    ],
     "queryLabel": null,
     "findingCount": 11,
     "gapCount": 4,
@@ -176,9 +246,11 @@ Lists saved comparison runs newest first. The response is an array of summaries:
 
 The default local file is `data/runs.json`; generated data is ignored by Git.
 
+The summary `sites` array preserves the same target-first identities and eligibility used by the full stored record.
+
 ## `GET /api/runs/latest?targetUrl=...`
 
-Returns the newest saved run whose normalized target URL matches the query.
+Returns the newest saved run whose normalized submitted target URL matches the query.
 
 Example:
 

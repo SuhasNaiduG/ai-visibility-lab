@@ -43,11 +43,12 @@ For a new rule, add the input evidence first, add one stable ID and full finding
 
 | Location | Responsibility | Edit here when… |
 |---|---|---|
-| `packages/comparison/types.ts` | Comparable analysis, matrix, metric, gap, and advantage contracts. | Adding a comparison field or changing a result contract. |
-| `packages/comparison/compare.ts` | 43 metric definitions, row projection, thresholds, gap/advantage logic, and explicit limitations. | Adding a comparison metric or changing a visible delta. Keep explanation and threshold adjacent. |
-| `packages/comparison/diff.ts` | Prior/current field groups, schema/finding/competitor/rank changes, and correlation disclaimer. | Tracking an additional historical field or changing matching semantics. |
+| `packages/comparison/eligibility.ts` | Evidence-backed eligible/degraded/ineligible classification, reason codes, thresholds, and the exact incomplete message. | Changing page-usability or benchmark-admission policy. Update focused eligibility and comparison regressions with every change. |
+| `packages/comparison/types.ts` | Comparable analysis, ordered site identity, eligibility, matrix, metric, side-by-side evidence, gap, advantage, and history-facing contracts. | Adding a comparison field or changing a result contract. Treat the additive identity/evidence fields as stored API contracts. |
+| `packages/comparison/compare.ts` | 43 metric definitions, target-first row projection, eligibility-filtered benchmarks, thresholds, gap/advantage evidence, conclusion status, and explicit limitations. | Adding a comparison metric, changing benchmark exclusion, or changing a visible delta/evidence bundle. Keep explanation and threshold adjacent. |
+| `packages/comparison/diff.ts` | Normalized-submitted-identity pairing, prior/current field groups, eligibility-aware comparability, competitor membership/order, finding/rank changes, and correlation disclaimer. | Tracking an additional historical field or changing identity, reorder, indeterminate, or rank-skip semantics. |
 | `packages/ranking/types.ts` | Optional provider seam and manual rank normalization/validation. | Implementing a verified rank adapter. Put the adapter in a new module; keep manual data provenance explicit. |
-| `services/analyzer/compare.ts` | Equal-path analysis, comparison, prior-run lookup, diff, and save. | Changing comparison orchestration, not metric formulas. |
+| `services/analyzer/compare.ts` | Creates stable target-first identities before parallel analysis, validates normalized outputs, then performs comparison, prior-run lookup, diff, and save. | Changing submitted URL ordering/identity or comparison orchestration, not eligibility/metric formulas. |
 
 Automatic rankings are deliberately absent. A future provider should implement `RankObservationProvider`, identify its source as `provider:<id>`, and remain optional. Never substitute estimated positions for observed data.
 
@@ -61,8 +62,8 @@ Wire an opt-in route in `services/analyzer/app.ts` and validate its request in `
 
 | Location | Responsibility | Edit here when… |
 |---|---|---|
-| `packages/storage/types.ts` | `RunStore`, record/summary contracts, schema version, and application version. | Adding a storage adapter or intentionally versioning stored data. |
-| `packages/storage/json-run-store.ts` | Runtime validation, serialized local writes, temporary-file cleanup, atomic rename, retrieval, and latest-run matching. | Changing JSON persistence or validation. Do not silently repair corrupt history. |
+| `packages/storage/types.ts` | `RunStore`, record/summary contracts (including ordered `sites`), schema version, and application version. | Adding a stored identity/history field, storage adapter, or intentionally versioning stored data. |
+| `packages/storage/json-run-store.ts` | Runtime structural validation plus deterministic `compareAnalyses`/`diffRuns` semantic validation for eligibility, identity, evidence, conclusions, and history; legacy comparison/history recomputation; serialized local writes; temporary-file cleanup; atomic rename; retrieval; and normalized-target matching. | Changing JSON persistence, compatibility normalization, validation, or latest-run matching. Do not silently repair corrupt history. |
 | `data/.gitkeep` | Keeps the generated-data directory in Git. | Normally never; `data/runs.json` is runtime output and ignored. |
 
 To replace JSON storage, implement `RunStore` in a new adapter and inject it through `createApp()`/`compareAndSaveRun()`. Keep storage-version migration explicit.
@@ -89,12 +90,13 @@ To replace JSON storage, implement `RunStore` in a new adapter and inject it thr
 | `tests/entities/extract.test.ts` | Coverage dimensions and source-linked signals. |
 | `tests/rules/evaluate.test.ts` | Rule stability and classification. |
 | `tests/verification/before-after.test.ts` | Fixture-based new/resolved/unchanged rule proof. |
-| `tests/comparison/compare.test.ts` | Matrix projection, multi-competitor gaps, evidence, and manual ranks. |
-| `tests/comparison/diff.test.ts` | Field groups, findings, competitor changes, query matching, and rank additions/removals/changes. |
+| `tests/comparison/eligibility.test.ts` | 403, HTTP 200 access-denied, empty, near-empty/degraded, and valid eligibility boundaries. |
+| `tests/comparison/compare.test.ts` | Matrix projection, target-first identities, mixed valid/invalid exclusion, unavailable targets, side-by-side evidence, multi-competitor gaps, and manual ranks. |
+| `tests/comparison/diff.test.ts` | Normalized submitted identity matching, membership versus reorder semantics, indeterminate ineligible snapshots, field groups, findings, query matching, and rank changes. |
 | `tests/ranking/types.test.ts` | Manual rank range and URL normalization. |
 | `tests/storage/json-run-store.test.ts` | Atomic persistence, validation failures, ordering, and cleanup. |
 | `tests/analyzer/analyze.test.ts` | Real orchestration with injected acquisition seams. |
-| `tests/analyzer/compare.test.ts` | Equal-path compare/save/history orchestration. |
+| `tests/analyzer/compare.test.ts` | Equal-path compare/save/history orchestration and stable ordering despite out-of-order parallel completion. |
 | `tests/analyzer/app.test.ts` | Route validation, error envelope/statuses, payload limit, and static interface. |
 | `tests/helpers/analysis.ts` | Complete deterministic analysis fixture builder shared by comparison/storage tests. |
 
@@ -123,3 +125,13 @@ When a public contract changes, update the closest unit test and an integration-
 - `data/runs.json` is local generated history and is never committed.
 - `data/runs.json.tmp` may exist only transiently during a write; the store cleans it after failures.
 - A real `.env` file is ignored and is not read automatically by this MVP.
+
+## Focused comparison hardening edit guide
+
+- Eligibility reason patterns/thresholds or exact incomplete message: `packages/comparison/eligibility.ts`.
+- Benchmark inclusion, `complete`/`partial`/`unavailable`, exclusions, matrix identity fields, or side-by-side gap evidence: `packages/comparison/compare.ts` and `packages/comparison/types.ts`.
+- Target-first submitted identity creation and analyzer-order validation: `services/analyzer/compare.ts`.
+- Normalized-submitted-URL history pairing, competitor added/removed/reordered semantics, indeterminate findings, or rank-skip behavior: `packages/comparison/diff.ts`.
+- Stored additive fields, runtime schemas, summaries, and compatibility handling: `packages/storage/types.ts` and `packages/storage/json-run-store.ts`.
+- Browser eligibility, raw retrieval, comparison evidence, and disabled-conclusion rendering: `apps/web/public/app.js` (presentation only); document structure and static-asset cache keys: `apps/web/public/index.html`; presentation styles: `apps/web/public/styles.css`.
+- Required regressions: `tests/comparison/eligibility.test.ts`, `tests/comparison/compare.test.ts`, `tests/comparison/diff.test.ts`, `tests/analyzer/compare.test.ts`, `tests/storage/json-run-store.test.ts`, and `tests/analyzer/app.test.ts`.

@@ -1,4 +1,5 @@
-import type { ComparableAnalysis, ManualRankObservations } from "./types.js";
+import { classifyComparisonEligibility } from "./eligibility.js";
+import type { ComparableAnalysis, ComparisonSite, ManualRankObservations } from "./types.js";
 
 export type ChangeKind = "added" | "removed" | "changed";
 export type ChangeCategory = "technical" | "metadata" | "schema" | "headings" | "content" | "links" | "media";
@@ -12,13 +13,35 @@ export interface ObservedChange {
   previousValue: unknown;
   currentValue: unknown;
   value?: unknown;
+  siteKey?: string;
+  inputOrder?: number;
+  previousSourceUrl?: string;
+  currentSourceUrl?: string;
 }
 
 export interface FindingChange {
   sourceUrl: string;
+  siteKey?: string;
+  inputOrder?: number;
+  previousSourceUrl?: string;
+  currentSourceUrl?: string;
   newRuleIds: string[];
   resolvedRuleIds: string[];
   unchangedRuleIds: string[];
+  indeterminateRuleIds: string[];
+}
+
+export interface CompetitorOrderMove {
+  normalizedUrl: string;
+  previousInputOrder: number;
+  currentInputOrder: number;
+}
+
+export interface CompetitorOrderingChange {
+  previousOrder: string[];
+  currentOrder: string[];
+  orderChanged: boolean;
+  moves: CompetitorOrderMove[];
 }
 
 export interface RankObservationChange {
@@ -49,6 +72,7 @@ export interface HistoricalComparison {
   competitorChanges: {
     addedUrls: string[];
     removedUrls: string[];
+    ordering: CompetitorOrderingChange;
     observedChanges: ObservedChange[];
   };
   rankObservationChanges: RankObservationChange[];
@@ -61,6 +85,7 @@ export interface DiffableRun {
   createdAt?: string;
   targetUrl: string;
   competitorUrls: string[];
+  sites?: ComparisonSite[];
   queryLabel: string | null;
   rankObservations: ManualRankObservations;
   analyses: ComparableAnalysis[];
@@ -77,29 +102,59 @@ const trackedFields: Array<{ category: ChangeCategory; fields: Array<keyof Compa
 ];
 
 export function diffRuns(previous: DiffableRun, current: DiffableRun): HistoricalComparison {
+  const previousSites = orderedSites(previous);
+  const currentSites = orderedSites(current);
   const previousByUrl = indexAnalyses(previous.analyses);
   const currentByUrl = indexAnalyses(current.analyses);
-  const targetKey = normalizeUrlKey(current.targetUrl);
-  const previousCompetitors = new Set(previous.competitorUrls.map(normalizeUrlKey));
-  const currentCompetitors = new Set(current.competitorUrls.map(normalizeUrlKey));
+  const previousSiteByUrl = new Map(previousSites.map((site) => [normalizeUrlKey(site.normalizedUrl), site]));
+  const currentSiteByUrl = new Map(currentSites.map((site) => [normalizeUrlKey(site.normalizedUrl), site]));
+  const targetKey = normalizeUrlKey(currentSites[0]?.normalizedUrl ?? current.targetUrl);
   const changes: ObservedChange[] = [];
   const findingChanges: FindingChange[] = [];
 
-  for (const [key, currentAnalysis] of currentByUrl) {
+  for (const currentSite of currentSites) {
+    const key = normalizeUrlKey(currentSite.normalizedUrl);
+    const currentAnalysis = currentByUrl.get(key);
     const previousAnalysis = previousByUrl.get(key);
-    if (!previousAnalysis) continue;
-    const scope = key === targetKey ? "target" : "competitor";
-    changes.push(...diffAnalysis(previousAnalysis, currentAnalysis, scope));
-    findingChanges.push(diffFindings(previousAnalysis, currentAnalysis));
+    const previousSite = previousSiteByUrl.get(key);
+    if (!currentAnalysis || !previousAnalysis || !previousSite) continue;
+    const scope = currentSite.role;
+    const contentComparable = previousSite.eligibility.usableAsBenchmark && currentSite.eligibility.usableAsBenchmark;
+    changes.push(...diffAnalysis(previousAnalysis, currentAnalysis, scope, previousSite, currentSite, contentComparable));
+    if (previousSite.eligibility.status !== currentSite.eligibility.status) {
+      changes.push(observedSiteChange(
+        previousAnalysis,
+        currentAnalysis,
+        previousSite,
+        currentSite,
+        "technical",
+        "comparisonEligibility",
+        previousSite.eligibility.status,
+        currentSite.eligibility.status
+      ));
+    }
+    findingChanges.push(diffFindings(previousAnalysis, currentAnalysis, previousSite, currentSite, contentComparable));
   }
 
-  const addedUrls = [...currentCompetitors].filter((url) => !previousCompetitors.has(url)).sort();
-  const removedUrls = [...previousCompetitors].filter((url) => !currentCompetitors.has(url)).sort();
+  const previousCompetitors = previousSites.filter((site) => site.role === "competitor");
+  const currentCompetitors = currentSites.filter((site) => site.role === "competitor");
+  const previousCompetitorKeys = new Set(previousCompetitors.map((site) => normalizeUrlKey(site.normalizedUrl)));
+  const currentCompetitorKeys = new Set(currentCompetitors.map((site) => normalizeUrlKey(site.normalizedUrl)));
+  const addedUrls = currentCompetitors.filter((site) => !previousCompetitorKeys.has(normalizeUrlKey(site.normalizedUrl))).map((site) => site.normalizedUrl);
+  const removedUrls = previousCompetitors.filter((site) => !currentCompetitorKeys.has(normalizeUrlKey(site.normalizedUrl))).map((site) => site.normalizedUrl);
+  const ordering = compareCompetitorOrdering(previousCompetitors, currentCompetitors);
   const sameQuery = normalizeQuery(previous.queryLabel) === normalizeQuery(current.queryLabel);
-  const rankObservationChanges = sameQuery ? diffRankObservations(previous, current) : [];
-  const rankComparisonSkippedReason = sameQuery
-    ? null
-    : "Manual rank changes were not compared because the query labels differ.";
+  const previousTarget = previousSiteByUrl.get(targetKey);
+  const currentTarget = currentSiteByUrl.get(targetKey);
+  const targetContentComparable = Boolean(previousTarget?.eligibility.usableAsBenchmark && currentTarget?.eligibility.usableAsBenchmark);
+  const rankComparisonSkippedReason = !sameQuery
+    ? "Manual rank changes were not compared because the query labels differ."
+    : !targetContentComparable
+    ? "Manual rank changes were not compared because target page eligibility made content correlation indeterminate."
+    : null;
+  const rankObservationChanges = rankComparisonSkippedReason
+    ? []
+    : diffRankObservations(previous, current, previousSites, currentSites);
   const targetChanges = changes.filter((change) => change.scope === "target");
   const targetRankChange = rankObservationChanges.find((change) => normalizeUrlKey(change.url) === targetKey) ?? null;
 
@@ -116,6 +171,7 @@ export function diffRuns(previous: DiffableRun, current: DiffableRun): Historica
     competitorChanges: {
       addedUrls,
       removedUrls,
+      ordering,
       observedChanges: changes.filter((change) => change.scope === "competitor")
     },
     rankObservationChanges,
@@ -132,55 +188,57 @@ export function diffRuns(previous: DiffableRun, current: DiffableRun): Historica
   };
 }
 
-function diffAnalysis(previous: ComparableAnalysis, current: ComparableAnalysis, scope: ObservedChange["scope"]): ObservedChange[] {
+function diffAnalysis(previous: ComparableAnalysis, current: ComparableAnalysis, scope: ObservedChange["scope"], previousSite: ComparisonSite, currentSite: ComparisonSite, contentComparable: boolean): ObservedChange[] {
   const changes: ObservedChange[] = [];
   for (const group of trackedFields) {
+    if (!contentComparable && group.category !== "technical") continue;
     for (const field of group.fields) {
       const previousValue = previous[field];
       const currentValue = current[field];
       if (!equal(previousValue, currentValue)) {
-        changes.push({
-          scope,
-          sourceUrl: current.finalUrl,
-          category: group.category,
-          field,
-          change: classifyChange(previousValue, currentValue),
-          previousValue,
-          currentValue
-        });
+        changes.push(observedSiteChange(previous, current, previousSite, currentSite, group.category, String(field), previousValue, currentValue));
       }
     }
   }
 
+  if (!contentComparable) return changes;
   const previousSchema = normalizedSchemaTypes(previous.schemaTypes);
   const currentSchema = normalizedSchemaTypes(current.schemaTypes);
   for (const key of [...currentSchema.keys()].filter((item) => !previousSchema.has(item)).sort()) {
     const value = currentSchema.get(key)!;
-    changes.push({ scope, sourceUrl: current.finalUrl, category: "schema", field: "schemaTypes", change: "added", previousValue: previous.schemaTypes, currentValue: current.schemaTypes, value });
+    changes.push({ ...observedSiteChange(previous, current, previousSite, currentSite, "schema", "schemaTypes", previous.schemaTypes, current.schemaTypes), change: "added", value });
   }
   for (const key of [...previousSchema.keys()].filter((item) => !currentSchema.has(item)).sort()) {
     const value = previousSchema.get(key)!;
-    changes.push({ scope, sourceUrl: current.finalUrl, category: "schema", field: "schemaTypes", change: "removed", previousValue: previous.schemaTypes, currentValue: current.schemaTypes, value });
+    changes.push({ ...observedSiteChange(previous, current, previousSite, currentSite, "schema", "schemaTypes", previous.schemaTypes, current.schemaTypes), change: "removed", value });
   }
   return changes;
 }
 
-function diffFindings(previous: ComparableAnalysis, current: ComparableAnalysis): FindingChange {
+function diffFindings(previous: ComparableAnalysis, current: ComparableAnalysis, previousSite: ComparisonSite, currentSite: ComparisonSite, contentComparable: boolean): FindingChange {
   const prior = new Set(previous.findings.map((finding) => finding.ruleId));
   const next = new Set(current.findings.map((finding) => finding.ruleId));
+  const unchangedRuleIds = [...next].filter((id) => prior.has(id)).sort();
   return {
     sourceUrl: current.finalUrl,
-    newRuleIds: [...next].filter((id) => !prior.has(id)).sort(),
-    resolvedRuleIds: [...prior].filter((id) => !next.has(id)).sort(),
-    unchangedRuleIds: [...next].filter((id) => prior.has(id)).sort()
+    siteKey: currentSite.normalizedUrl,
+    inputOrder: currentSite.inputOrder,
+    previousSourceUrl: previous.finalUrl,
+    currentSourceUrl: current.finalUrl,
+    newRuleIds: contentComparable ? [...next].filter((id) => !prior.has(id)).sort() : [],
+    resolvedRuleIds: contentComparable ? [...prior].filter((id) => !next.has(id)).sort() : [],
+    unchangedRuleIds,
+    indeterminateRuleIds: contentComparable
+      ? []
+      : [...new Set([...prior, ...next])].filter((id) => !unchangedRuleIds.includes(id)).sort()
   };
 }
 
-function diffRankObservations(previous: DiffableRun, current: DiffableRun): RankObservationChange[] {
+function diffRankObservations(previous: DiffableRun, current: DiffableRun, previousSites: ComparisonSite[], currentSites: ComparisonSite[]): RankObservationChange[] {
   const prior = normalizedRanks(previous.rankObservations);
   const next = normalizedRanks(current.rankObservations);
   const changes: RankObservationChange[] = [];
-  const urls = new Set([...prior.keys(), ...next.keys()]);
+  const urls = orderedIdentityKeys(previousSites, currentSites);
   for (const url of urls) {
     const currentPosition = next.get(url);
     const previousPosition = prior.get(url);
@@ -194,7 +252,7 @@ function diffRankObservations(previous: DiffableRun, current: DiffableRun): Rank
       change: previousPosition === undefined ? "added" : currentPosition === undefined ? "removed" : "changed"
     });
   }
-  return changes.sort((left, right) => left.url.localeCompare(right.url));
+  return changes;
 }
 
 function normalizeQuery(value: string | null): string | null {
@@ -212,6 +270,101 @@ function normalizedRanks(values: ManualRankObservations): Map<string, number> {
 
 function normalizedSchemaTypes(values: string[]): Map<string, string> {
   return new Map(values.map((value) => [value.trim().toLocaleLowerCase("en-US"), value]));
+}
+
+function observedSiteChange(
+  previous: ComparableAnalysis,
+  current: ComparableAnalysis,
+  previousSite: ComparisonSite,
+  currentSite: ComparisonSite,
+  category: ChangeCategory,
+  field: string,
+  previousValue: unknown,
+  currentValue: unknown
+): ObservedChange {
+  return {
+    scope: currentSite.role,
+    sourceUrl: current.finalUrl,
+    category,
+    field,
+    change: classifyChange(previousValue, currentValue),
+    previousValue,
+    currentValue,
+    siteKey: currentSite.normalizedUrl,
+    inputOrder: currentSite.inputOrder,
+    previousSourceUrl: previous.finalUrl,
+    currentSourceUrl: current.finalUrl
+  };
+}
+
+function compareCompetitorOrdering(previous: ComparisonSite[], current: ComparisonSite[]): CompetitorOrderingChange {
+  const previousOrder = previous.map((site) => site.normalizedUrl);
+  const currentOrder = current.map((site) => site.normalizedUrl);
+  const previousSet = new Set(previousOrder.map(normalizeUrlKey));
+  const currentSet = new Set(currentOrder.map(normalizeUrlKey));
+  const previousCommon = previousOrder.filter((url) => currentSet.has(normalizeUrlKey(url)));
+  const currentCommon = currentOrder.filter((url) => previousSet.has(normalizeUrlKey(url)));
+  const orderChanged = !equal(previousCommon.map(normalizeUrlKey), currentCommon.map(normalizeUrlKey));
+  const moves = orderChanged
+    ? currentCommon.flatMap((url) => {
+        const key = normalizeUrlKey(url);
+        const previousSite = previous.find((site) => normalizeUrlKey(site.normalizedUrl) === key);
+        const currentSite = current.find((site) => normalizeUrlKey(site.normalizedUrl) === key);
+        if (!previousSite || !currentSite) return [];
+        const previousRelativeIndex = previousCommon.findIndex((item) => normalizeUrlKey(item) === key);
+        const currentRelativeIndex = currentCommon.findIndex((item) => normalizeUrlKey(item) === key);
+        return previousRelativeIndex === currentRelativeIndex ? [] : [{
+          normalizedUrl: currentSite.normalizedUrl,
+          previousInputOrder: previousSite.inputOrder,
+          currentInputOrder: currentSite.inputOrder
+        }];
+      })
+    : [];
+  return { previousOrder, currentOrder, orderChanged, moves };
+}
+
+function orderedIdentityKeys(previousSites: ComparisonSite[], currentSites: ComparisonSite[]): string[] {
+  const result: string[] = [];
+  const seen = new Set<string>();
+  for (const site of [...currentSites, ...previousSites]) {
+    const key = normalizeUrlKey(site.normalizedUrl);
+    if (!seen.has(key)) {
+      result.push(key);
+      seen.add(key);
+    }
+  }
+  return result;
+}
+
+function orderedSites(run: DiffableRun): ComparisonSite[] {
+  if (run.sites?.length) return [...run.sites].sort((left, right) => left.inputOrder - right.inputOrder);
+  const analyses = indexAnalyses(run.analyses);
+  return [run.targetUrl, ...run.competitorUrls].map((url, inputOrder) => {
+    const key = normalizeUrlKey(url);
+    const analysis = analyses.get(key);
+    if (!analysis) {
+      return {
+        role: inputOrder === 0 ? "target" : "competitor",
+        inputOrder,
+        inputUrl: url,
+        normalizedUrl: key,
+        finalUrl: key,
+        eligibility: {
+          status: "ineligible",
+          usableAsBenchmark: false,
+          reasons: []
+        }
+      };
+    }
+    return {
+      role: inputOrder === 0 ? "target" : "competitor",
+      inputOrder,
+      inputUrl: analysis.requestedUrl,
+      normalizedUrl: analysis.normalizedUrl,
+      finalUrl: analysis.finalUrl,
+      eligibility: classifyComparisonEligibility(analysis)
+    };
+  });
 }
 
 function indexAnalyses(analyses: ComparableAnalysis[]): Map<string, ComparableAnalysis> {

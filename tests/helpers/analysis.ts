@@ -40,6 +40,7 @@ export function makeAnalysis(url: string, overrides: Partial<ComparableAnalysis>
     headingLevelJumps: [],
     emptyHeadingCount: 0,
     repeatedHeadings: [],
+    visibleText: "Example service page with useful public information, treatment details, contact options, and supporting evidence for readers.",
     wordCount: 250,
     sentenceCount: 15,
     questionCount: 0,

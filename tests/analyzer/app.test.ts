@@ -61,6 +61,7 @@ const analysisResult: AnalysisResult = {
 function runRecord(): RunRecord {
   const target = makeAnalysis("https://target.example/");
   const competitor = makeAnalysis("https://competitor.example/");
+  const comparison = makeComparison(target, competitor);
   return {
     id: "run-1",
     createdAt: "2026-07-15T00:00:00.000Z",
@@ -68,10 +69,11 @@ function runRecord(): RunRecord {
     applicationVersion: "1.0.0",
     targetUrl: target.normalizedUrl,
     competitorUrls: [competitor.normalizedUrl],
+    sites: comparison.sites,
     queryLabel: "example query",
     rankObservations: {},
     analyses: [target, competitor],
-    comparison: makeComparison(target, competitor),
+    comparison,
     history: null
   };
 }
@@ -85,6 +87,7 @@ class MemoryRunStore implements RunStore {
     createdAt: run.createdAt,
     targetUrl: run.targetUrl,
     competitorUrls: run.competitorUrls,
+    sites: run.sites,
     queryLabel: run.queryLabel,
     findingCount: 0,
     gapCount: run.comparison.targetGaps.length,
@@ -119,6 +122,12 @@ describe("analyzer API", () => {
     expect(response.status).toBe(200);
     expect(response.headers["content-type"]).toMatch(/text\/html/);
     expect(response.text).toContain("AI Visibility Engineering Lab");
+
+    const script = await request(app()).get("/app.js");
+    expect(script.status).toBe(200);
+    expect(script.text).toContain("function renderAdvantages(");
+    expect(script.text).toContain("renderGapEvidence(advantage, siteEntries)");
+    expect(script.text).toContain("Raw retrieval evidence remains available above.");
   });
 
   it.each([{}, { url: "" }])("rejects a missing or empty URL", async (body) => {

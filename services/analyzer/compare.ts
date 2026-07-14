@@ -1,4 +1,6 @@
 import { compareAnalyses } from "../../packages/comparison/compare.js";
+import type { ComparisonSiteInput } from "../../packages/comparison/types.js";
+import { normalizeUrl } from "../../packages/crawler/url.js";
 import { diffRuns } from "../../packages/comparison/diff.js";
 import { validateManualRankObservations } from "../../packages/ranking/types.js";
 import type { RunRecord, RunStore } from "../../packages/storage/types.js";
@@ -21,8 +23,15 @@ export async function compareAndSaveRun(
   dependencies: ComparisonServiceDependencies
 ): Promise<RunRecord> {
   const analyze = dependencies.analyze ?? analyzeUrl;
+  const submittedUrls = [input.targetUrl, ...input.competitorUrls];
+  const sites: ComparisonSiteInput[] = submittedUrls.map((url, inputOrder) => ({
+    role: inputOrder === 0 ? "target" : "competitor",
+    inputOrder,
+    inputUrl: url.trim(),
+    normalizedUrl: normalizeUrl(url).toString()
+  }));
   const analyses = await Promise.all(
-    [input.targetUrl, ...input.competitorUrls].map((url) => analyze(url))
+    submittedUrls.map((url) => analyze(url))
   );
   const target = analyses[0];
   const competitors = analyses.slice(1);
@@ -30,12 +39,18 @@ export async function compareAndSaveRun(
   if (!target || competitors.length < 1 || competitors.length > 3) {
     throw new Error("Comparison requires one target and one to three competitors");
   }
+  analyses.forEach((analysis, index) => {
+    if (analysis.normalizedUrl !== sites[index]?.normalizedUrl) {
+      throw new Error(`Analyzer returned a mismatched normalized URL at input order ${index}`);
+    }
+  });
 
   const rankObservations = validateManualRankObservations(input.rankObservations);
   const queryLabel = input.queryLabel?.trim() || null;
   const comparison = compareAnalyses({
     target,
     competitors,
+    sites,
     queryLabel,
     rankObservations
   });
@@ -45,6 +60,7 @@ export async function compareAndSaveRun(
   const currentSnapshot = {
     targetUrl,
     competitorUrls,
+    sites: comparison.sites,
     queryLabel,
     rankObservations,
     analyses

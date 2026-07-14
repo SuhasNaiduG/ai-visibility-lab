@@ -353,9 +353,9 @@ Make the complete deterministic workflow usable without moving analysis logic in
 
 Leave a reproducible, inspectable MVP and an exact map for the next engineer.
 
-### Verification gate
+### Verification gate at this checkpoint
 
-* `npm test`: 16 test files passed; 83 tests passed after final regression additions.
+* `npm test`: 16 test files passed; 83 tests passed at the prior handoff checkpoint.
 * `npm run build`: strict TypeScript compilation passed.
 * `npm run dev`: local service startup and `GET /health` were verified.
 * Live browser workflow: analysis, comparison, persistence, historical diff, run listing, and saved-run reopening passed with no console warnings/errors.
@@ -372,3 +372,42 @@ Leave a reproducible, inspectable MVP and an exact map for the next engineer.
 * `docs/change-report.md`
 
 The deterministic MVP remains intentionally bounded: one submitted page per site, public evidence only, no automatic rank provider, no private analytics, no AI API, no aggregate visibility score, and no causation claims.
+
+### Commit
+
+`abe3b16 docs: document architecture methodology and handoff`
+
+---
+
+# Milestone 8 — Comparison Eligibility, Identity, and History Integrity
+
+### Objective
+
+Prevent unusable retrievals from becoming competitor conclusions while preserving raw evidence, submitted identity, and honest historical uncertainty.
+
+### Accomplishments
+
+* Added evidence-backed `eligible`, `degraded`, and `ineligible` page classification, including non-2xx, HTTP 200 access-denied/challenge/error, empty, and near-empty response handling.
+* Kept every site in the raw matrix while excluding ineligible competitors from scalar, boolean, and set benchmarks.
+* Added `complete`, `partial`, and `unavailable` conclusion states plus one exact user-visible incomplete message.
+* Preserved stable target-first submitted identities (`inputOrder` 0 through 3) across parallel analysis, comparison rows, storage, summaries, and history.
+* Added visible side-by-side target/competitor evidence bundles with observed values and benchmark markers.
+* Matched historical snapshots by normalized submitted URL, separated competitor membership from reordering, and made non-technical/finding/rank history indeterminate when retrieval eligibility prevents a valid comparison.
+* Added bounded normalization for compatible schema-version-1 local records, followed by current-contract and identity-alignment validation.
+* Expanded focused eligibility, comparison, history, orchestration, storage, API, and interface regressions.
+
+### Verification status
+
+* `npm test`: 17 test files and 116 tests passed.
+* `npm run build`: strict TypeScript build passed with no emitted diagnostic.
+* `node --check apps/web/public/app.js` and `git diff --check`: passed.
+* Compiled-service `/health` smoke test on `127.0.0.1:3117`: passed; the temporary process was stopped.
+* Existing 3.4 MB `data/runs.json`: 5 records loaded read-only and the file remained unchanged.
+* Live mixed-eligibility browser verification preserved target-first order, showed raw evidence for all four sites, excluded 403/405 responses from 11 gaps and 4 advantages, rendered the exact incomplete message, and produced no browser warnings/errors.
+* Live verification exposed an overly broad numeric-error-title match for `425 Clear Aligners...`; the pattern was narrowed and a regression was added. A final audit also bounded error-body matching by normal page evidence so legitimate troubleshooting articles remain usable.
+* Target advantages now reuse the same visible side-by-side evidence panels as gaps. Current stored comparisons and histories are semantically checked against deterministic `compareAnalyses`/`diffRuns` recomputation so fabricated values, benchmark flags, deltas, conclusion sets, observed changes, findings, ranks, membership/order, or correlation summaries are rejected.
+* Focused commit subject: `fix: validate comparison eligibility and preserve site order`; the exact hash is reported in the completion handoff because a commit cannot contain its own hash.
+
+### Engineering principle
+
+Retrieval evidence may be incomplete without being hidden. Preserve it for inspection, but do not turn an unusable page into a benchmark, a resolved finding, or a rank-correlation claim.
