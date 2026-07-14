@@ -1,0 +1,12 @@
+{
+  "name": "ai-visibility-lab",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch services/analyzer/index.ts",
+    "build": "tsc",
+    "start": "node dist/services/analyzer/index.js",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  }
+}
