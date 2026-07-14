@@ -114,6 +114,13 @@ describe("analyzer API", () => {
     expect(response.body).toEqual({ status: "ok" });
   });
 
+  it("serves the static browser interface", async () => {
+    const response = await request(app()).get("/");
+    expect(response.status).toBe(200);
+    expect(response.headers["content-type"]).toMatch(/text\/html/);
+    expect(response.text).toContain("AI Visibility Engineering Lab");
+  });
+
   it.each([{}, { url: "" }])("rejects a missing or empty URL", async (body) => {
     const response = await request(app()).post("/api/analyze").send(body);
     expect(response.status).toBe(400);
@@ -158,6 +165,16 @@ describe("analyzer API", () => {
     expect(duplicate.status).toBe(400);
     const foreignRank = await request(app()).post("/api/compare").send({ targetUrl: pageUrl, competitorUrls: ["https://two.example"], rankObservations: { "https://other.example": 2 } });
     expect(foreignRank.status).toBe(400);
+    const invalidCompetitor = await request(app()).post("/api/compare").send({ targetUrl: pageUrl, competitorUrls: ["ftp://two.example"] });
+    expect(invalidCompetitor.status).toBe(400);
+    expect(invalidCompetitor.body.error.details.fieldErrors).toHaveProperty("competitorUrls");
+    expect(invalidCompetitor.body.error.details.fieldErrors).not.toHaveProperty("targetUrl");
+    const duplicateRankAlias = await request(app()).post("/api/compare").send({
+      targetUrl: pageUrl,
+      competitorUrls: ["https://two.example"],
+      rankObservations: { "example.com": 8, "https://example.com/": 7 }
+    });
+    expect(duplicateRankAlias.status).toBe(400);
     expect(compareAndSave).not.toHaveBeenCalled();
   });
 
@@ -183,5 +200,19 @@ describe("analyzer API", () => {
     const response = await request(app()).post("/api/analyze").set("Content-Type", "application/json").send("{");
     expect(response.status).toBe(400);
     expect(response.body.error.code).toBe("INVALID_JSON");
+  });
+
+  it("rejects JSON request bodies larger than 100 KB", async () => {
+    const response = await request(app())
+      .post("/api/analyze")
+      .set("Content-Type", "application/json")
+      .send(JSON.stringify({ url: "https://example.com", padding: "x".repeat(101 * 1024) }));
+    expect(response.status).toBe(413);
+    expect(response.body.error).toEqual({
+      code: "REQUEST_TOO_LARGE",
+      message: "Request body exceeds the allowed size",
+      details: {}
+    });
+    expect(analyze).not.toHaveBeenCalled();
   });
 });

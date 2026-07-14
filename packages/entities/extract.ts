@@ -279,7 +279,7 @@ function collectTextSignals(
   addMatches(signals, source, TRUST_PATTERN, "trust");
   addMatches(signals, source, CONTACT_PATTERN, "contact");
   addMatches(signals, source, EMAIL_PATTERN, "contact", false);
-  addMatches(signals, source, PHONE_PATTERN, "contact", false);
+  addMatches(signals, source, PHONE_PATTERN, "contact");
 
   for (const match of source.text.matchAll(LOCATION_PATTERN)) {
     const term = match[1]?.trim();

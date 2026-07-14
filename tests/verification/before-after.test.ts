@@ -30,6 +30,7 @@ describe("before-and-after verification", () => {
     const before = analyzeFixture("original");
     const after = analyzeFixture("corrected");
     const resolved = before.filter((ruleId) => !after.includes(ruleId));
+    const unchanged = before.filter((ruleId) => after.includes(ruleId));
 
     expect(before).toEqual(expect.arrayContaining([
       "CANONICAL_MISMATCH",
@@ -47,5 +48,6 @@ describe("before-and-after verification", () => {
       "JSONLD_INVALID",
       "IMAGE_ALT_MISSING"
     ]));
+    expect(unchanged).toContain("INTERNAL_LINKS_LOW");
   });
 });

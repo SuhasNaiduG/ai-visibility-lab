@@ -19,7 +19,11 @@ export function validateManualRankObservations(values: Record<string, number> | 
     if (!Number.isInteger(position) || position < 1 || position > 1000) {
       throw new Error(`Manual rank for ${url} must be an integer from 1 to 1000`);
     }
-    normalized[normalizeUrl(url).toString()] = position;
+    const normalizedUrl = normalizeUrl(url).toString();
+    if (Object.hasOwn(normalized, normalizedUrl)) {
+      throw new Error(`Manual rank contains duplicate normalized URL: ${normalizedUrl}`);
+    }
+    normalized[normalizedUrl] = position;
   }
   return normalized;
 }

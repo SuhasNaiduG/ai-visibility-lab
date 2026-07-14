@@ -96,7 +96,9 @@ const analysisSchema = z.looseObject({
   questionCount: z.number().int().nonnegative(),
   detectedQuestions: z.array(z.string()),
   faqIndicators: z.array(z.unknown()),
+  breadcrumbIndicators: z.array(z.unknown()),
   directAnswerCount: z.number().int().nonnegative(),
+  directAnswers: z.array(z.unknown()),
   jsonLdParseErrors: z.array(z.unknown()),
   schemaTypes: z.array(z.string()),
   imageCount: z.number().int().nonnegative(),
@@ -104,8 +106,13 @@ const analysisSchema = z.looseObject({
   internalLinkCount: z.number().int().nonnegative(),
   externalLinkCount: z.number().int().nonnegative(),
   uniqueInternalUrls: z.array(httpUrlSchema),
+  uniqueInternalUrlCount: z.number().int().nonnegative(),
+  uniqueExternalUrls: z.array(httpUrlSchema),
   externalDomains: z.array(z.string()),
+  uniqueExternalDomainCount: z.number().int().nonnegative(),
+  anchorTextSummary: z.array(z.unknown()),
   emptyAnchorCount: z.number().int().nonnegative(),
+  imageAltIssues: z.array(z.unknown()),
   robotsTxtAvailable: z.boolean(),
   robotsTxtStatusCode: z.number().int().min(100).max(599).nullable(),
   sitemapXmlAvailable: z.boolean(),
@@ -117,6 +124,19 @@ const analysisSchema = z.looseObject({
 const competitorEvidenceSchema = z.looseObject({
   sourceUrl: httpUrlSchema,
   evidence: z.array(evidenceSchema)
+});
+
+const comparisonDeltaSchema = z.strictObject({
+  targetValue: z.union([z.number(), z.boolean()]),
+  benchmarkValue: z.union([z.number(), z.boolean()]),
+  difference: z.number().nonnegative().nullable(),
+  threshold: z.number().nonnegative().nullable(),
+  interpretation: z.enum([
+    "target-below-benchmark",
+    "target-above-benchmark",
+    "target-absent",
+    "target-present"
+  ])
 });
 
 const comparisonGapSchema = z.looseObject({
@@ -131,7 +151,8 @@ const comparisonGapSchema = z.looseObject({
   verificationMethod: z.string().min(1),
   priority: z.enum(["high", "medium", "low"]),
   effort: z.enum(["low", "medium", "high"]),
-  caution: z.string().min(1)
+  caution: z.string().min(1),
+  delta: comparisonDeltaSchema.optional()
 });
 
 const metricDefinitionSchema = z.looseObject({
@@ -159,7 +180,8 @@ const targetAdvantageSchema = z.looseObject({
   targetEvidence: z.array(evidenceSchema),
   competitorEvidence: z.array(competitorEvidenceSchema),
   whatDiffers: z.string().min(1),
-  interpretation: z.string().min(1)
+  interpretation: z.string().min(1),
+  delta: comparisonDeltaSchema.optional()
 });
 
 const comparisonSchema = z.looseObject({

@@ -57,7 +57,7 @@ export const METRIC_DEFINITIONS: MetricDefinition[] = [
   definition("imageCount", "Images", "Media volume", "Media volume provides context for alt-text coverage.", "context-only"),
   definition("imagesMissingAltCount", "Images missing alt", "Observed media accessibility gaps", "Alt text makes informative images more interpretable and accessible.", "lower-is-better"),
   definition("emptyAnchorCount", "Empty anchors", "HTTP links without visible anchor text", "Descriptive anchors expose destination context.", "lower-is-better"),
-  definition("topicTermCount", "Topic terms", "Distinct inspected heading/title terms", "Explicit terminology can reduce subject ambiguity.", "higher-is-more"),
+  definition("topicTermCount", "Topic/coverage terms", "Distinct inspected content-section, service, entity, and location terms", "Explicit terminology can reduce subject ambiguity.", "higher-is-more"),
   definition("serviceTermCount", "Service terms", "Explicit inspected service phrases", "Service clarity helps explain what is offered.", "higher-is-more"),
   definition("locationTermCount", "Location terms", "Explicit inspected location phrases", "Location clarity helps explain where service is available.", "higher-is-more"),
   definition("hasIdentitySignals", "Identity signals", "Observed organization, person, author, or provider labels", "Identity signals clarify source accountability.", "context-only"),
@@ -239,7 +239,14 @@ function evaluateScalar(rule: ScalarRule, target: ComparableAnalysis, competitor
       verificationMethod: rule.verification,
       priority: rule.priority,
       effort: rule.effort,
-      caution: "Treat this as a comparison gap, not a ranking prediction. Preserve accuracy and user value over metric parity."
+      caution: "Treat this as a comparison gap, not a ranking prediction. Preserve accuracy and user value over metric parity.",
+      delta: {
+        targetValue,
+        benchmarkValue: relevant,
+        difference,
+        threshold: rule.minDifference,
+        interpretation: rule.reverse ? "target-above-benchmark" : "target-below-benchmark"
+      }
     });
   }
   const inverseDifference = rule.reverse ? relevant - targetValue : targetValue - relevant;
@@ -250,7 +257,14 @@ function evaluateScalar(rule: ScalarRule, target: ComparableAnalysis, competitor
       targetEvidence: [metricEvidence(target, rule.key, targetValue)],
       competitorEvidence: competitorEvidence(competitors, rule.key, competitorValues),
       whatDiffers: `Target ${rule.key} is ${targetValue}; the relevant competitor benchmark is ${relevant}.`,
-      interpretation: "This is an observed target advantage for this metric only; it does not prove ranking or citation eligibility."
+      interpretation: "This is an observed target advantage for this metric only; it does not prove ranking or citation eligibility.",
+      delta: {
+        targetValue,
+        benchmarkValue: relevant,
+        difference: inverseDifference,
+        threshold: rule.minDifference,
+        interpretation: rule.reverse ? "target-below-benchmark" : "target-above-benchmark"
+      }
     });
   }
 }
@@ -268,7 +282,14 @@ function evaluateBooleanDifference(gapId: string, advantageId: string, metric: C
     verificationMethod: verification,
     priority,
     effort: "medium",
-    caution: "Implement only when supported by truthful visible content; do not copy wording or fabricate evidence."
+    caution: "Implement only when supported by truthful visible content; do not copy wording or fabricate evidence.",
+    delta: {
+      targetValue,
+      benchmarkValue: true,
+      difference: null,
+      threshold: null,
+      interpretation: "target-absent"
+    }
   });
   if (targetValue && competitorValues.every((value) => !value)) {
     advantages.push({
@@ -277,7 +298,14 @@ function evaluateBooleanDifference(gapId: string, advantageId: string, metric: C
       targetEvidence: [metricEvidence(target, metric, targetValue)],
       competitorEvidence: competitorEvidence(competitors, metric, competitorValues),
       whatDiffers: `The target shows ${metric}; none of the compared competitors do.`,
-      interpretation: "This is a transparent observed difference, not proof of ranking or citation eligibility."
+      interpretation: "This is a transparent observed difference, not proof of ranking or citation eligibility.",
+      delta: {
+        targetValue,
+        benchmarkValue: false,
+        difference: null,
+        threshold: null,
+        interpretation: "target-present"
+      }
     });
   }
 }

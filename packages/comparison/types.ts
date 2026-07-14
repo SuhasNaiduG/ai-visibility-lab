@@ -66,7 +66,14 @@ export interface ComparableAnalysis {
     selector?: string;
     heuristic: boolean;
   }>;
+  breadcrumbIndicators: Array<{
+    text: string;
+    field: string;
+    selector?: string;
+    heuristic: boolean;
+  }>;
   directAnswerCount: number;
+  directAnswers: unknown[];
   jsonLdParseErrors: unknown[];
   schemaTypes: string[];
   imageCount: number;
@@ -74,8 +81,13 @@ export interface ComparableAnalysis {
   internalLinkCount: number;
   externalLinkCount: number;
   uniqueInternalUrls: string[];
+  uniqueInternalUrlCount: number;
+  uniqueExternalUrls: string[];
   externalDomains: string[];
+  uniqueExternalDomainCount: number;
+  anchorTextSummary: unknown[];
   emptyAnchorCount: number;
+  imageAltIssues: unknown[];
   robotsTxtAvailable: boolean;
   robotsTxtStatusCode: number | null;
   sitemapXmlAvailable: boolean;
@@ -158,6 +170,18 @@ export interface CompetitorEvidence {
   evidence: Evidence[];
 }
 
+export interface ComparisonDelta {
+  targetValue: number | boolean;
+  benchmarkValue: number | boolean;
+  difference: number | null;
+  threshold: number | null;
+  interpretation:
+    | "target-below-benchmark"
+    | "target-above-benchmark"
+    | "target-absent"
+    | "target-present";
+}
+
 export interface ComparisonGap {
   gapId: string;
   metric: string;
@@ -171,6 +195,8 @@ export interface ComparisonGap {
   priority: Priority;
   effort: Effort;
   caution: string;
+  /** Present for scalar and boolean comparisons; absent on set-difference gaps. */
+  delta?: ComparisonDelta;
 }
 
 export interface TargetAdvantage {
@@ -180,6 +206,8 @@ export interface TargetAdvantage {
   competitorEvidence: CompetitorEvidence[];
   whatDiffers: string;
   interpretation: string;
+  /** Present for scalar and boolean comparisons. */
+  delta?: ComparisonDelta;
 }
 
 export interface ComparisonResult {

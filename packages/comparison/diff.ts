@@ -67,12 +67,13 @@ export interface DiffableRun {
 }
 
 const trackedFields: Array<{ category: ChangeCategory; fields: Array<keyof ComparableAnalysis> }> = [
-  { category: "technical", fields: ["statusCode", "finalUrl", "redirectCount", "robotsTxtAvailable", "sitemapXmlAvailable", "indexability"] },
+  { category: "technical", fields: ["statusCode", "finalUrl", "redirectCount", "robotsTxtAvailable", "robotsTxtStatusCode", "sitemapXmlAvailable", "sitemapXmlStatusCode", "indexability"] },
   { category: "metadata", fields: ["title", "titleLength", "metaDescription", "metaDescriptionLength", "canonicalUrl", "canonicalStatus", "robotsMeta", "documentLanguage", "viewportPresent"] },
-  { category: "headings", fields: ["h1Count", "h1Text", "headingHierarchy", "totalHeadingCount"] },
-  { category: "content", fields: ["wordCount", "sentenceCount", "questionCount", "detectedQuestions", "faqIndicators", "directAnswerCount", "coverage"] },
-  { category: "links", fields: ["internalLinkCount", "externalLinkCount", "uniqueInternalUrls", "externalDomains"] },
-  { category: "media", fields: ["imageCount", "imagesMissingAlt"] }
+  { category: "schema", fields: ["jsonLdParseErrors"] },
+  { category: "headings", fields: ["h1Count", "h1Text", "headingHierarchy", "totalHeadingCount", "headingLevelJumps", "emptyHeadingCount", "repeatedHeadings"] },
+  { category: "content", fields: ["wordCount", "sentenceCount", "questionCount", "detectedQuestions", "faqIndicators", "breadcrumbIndicators", "directAnswerCount", "directAnswers", "coverage"] },
+  { category: "links", fields: ["internalLinkCount", "externalLinkCount", "uniqueInternalUrls", "uniqueInternalUrlCount", "uniqueExternalUrls", "externalDomains", "uniqueExternalDomainCount", "anchorTextSummary", "emptyAnchorCount"] },
+  { category: "media", fields: ["imageCount", "imagesMissingAlt", "imageAltIssues"] }
 ];
 
 export function diffRuns(previous: DiffableRun, current: DiffableRun): HistoricalComparison {
@@ -151,12 +152,14 @@ function diffAnalysis(previous: ComparableAnalysis, current: ComparableAnalysis,
     }
   }
 
-  const previousSchema = new Set(previous.schemaTypes);
-  const currentSchema = new Set(current.schemaTypes);
-  for (const value of [...currentSchema].filter((item) => !previousSchema.has(item)).sort()) {
+  const previousSchema = normalizedSchemaTypes(previous.schemaTypes);
+  const currentSchema = normalizedSchemaTypes(current.schemaTypes);
+  for (const key of [...currentSchema.keys()].filter((item) => !previousSchema.has(item)).sort()) {
+    const value = currentSchema.get(key)!;
     changes.push({ scope, sourceUrl: current.finalUrl, category: "schema", field: "schemaTypes", change: "added", previousValue: previous.schemaTypes, currentValue: current.schemaTypes, value });
   }
-  for (const value of [...previousSchema].filter((item) => !currentSchema.has(item)).sort()) {
+  for (const key of [...previousSchema.keys()].filter((item) => !currentSchema.has(item)).sort()) {
+    const value = previousSchema.get(key)!;
     changes.push({ scope, sourceUrl: current.finalUrl, category: "schema", field: "schemaTypes", change: "removed", previousValue: previous.schemaTypes, currentValue: current.schemaTypes, value });
   }
   return changes;
@@ -205,6 +208,10 @@ function normalizedRanks(values: ManualRankObservations): Map<string, number> {
     result.set(normalizeUrlKey(url), position);
   }
   return result;
+}
+
+function normalizedSchemaTypes(values: string[]): Map<string, string> {
+  return new Map(values.map((value) => [value.trim().toLocaleLowerCase("en-US"), value]));
 }
 
 function indexAnalyses(analyses: ComparableAnalysis[]): Map<string, ComparableAnalysis> {

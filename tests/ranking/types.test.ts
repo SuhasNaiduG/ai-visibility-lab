@@ -6,5 +6,6 @@ describe("manual rank observations", () => {
     expect(validateManualRankObservations({ "example.com": 8 })).toEqual({ "https://example.com/": 8 });
     expect(() => validateManualRankObservations({ "https://example.com": 0 })).toThrow(/1 to 1000/);
     expect(() => validateManualRankObservations({ "ftp://example.com": 8 })).toThrow(/HTTP and HTTPS/);
+    expect(() => validateManualRankObservations({ "example.com": 8, "https://example.com/": 7 })).toThrow(/duplicate normalized URL/i);
   });
 });

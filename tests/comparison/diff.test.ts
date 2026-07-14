@@ -31,7 +31,7 @@ describe("diffRuns", () => {
       queryLabel: "example query",
       rankObservations: { [targetUrl]: 8 },
       analyses: [
-        makeAnalysis(targetUrl, { h1Count: 2, h1Text: ["One", "Two"], findings: [finding("HEADING_MULTIPLE_H1"), finding("META_DESCRIPTION_MISSING")] }),
+        makeAnalysis(targetUrl, { h1Count: 2, h1Text: ["One", "Two"], robotsTxtStatusCode: 404, findings: [finding("HEADING_MULTIPLE_H1"), finding("META_DESCRIPTION_MISSING")] }),
         makeAnalysis(competitorUrl)
       ]
     };
@@ -41,7 +41,7 @@ describe("diffRuns", () => {
       queryLabel: "Example   Query",
       rankObservations: { [targetUrl]: 5 },
       analyses: [
-        makeAnalysis(targetUrl, { h1Count: 1, h1Text: ["One"], findings: [finding("META_DESCRIPTION_MISSING")] }),
+        makeAnalysis(targetUrl, { h1Count: 1, h1Text: ["One"], robotsTxtStatusCode: 403, findings: [finding("META_DESCRIPTION_MISSING")] }),
         makeAnalysis(competitorUrl, { schemaTypes: ["Organization", "FAQPage"] })
       ]
     };
@@ -51,6 +51,9 @@ describe("diffRuns", () => {
     expect(result.previousRunId).toBe("previous-run");
     expect(result.headingChanges).toEqual(expect.arrayContaining([
       expect.objectContaining({ scope: "target", field: "h1Count", previousValue: 2, currentValue: 1 })
+    ]));
+    expect(result.technicalChanges).toEqual(expect.arrayContaining([
+      expect.objectContaining({ scope: "target", field: "robotsTxtStatusCode", previousValue: 404, currentValue: 403 })
     ]));
     expect(result.findingChanges[0]).toEqual(expect.objectContaining({
       resolvedRuleIds: ["HEADING_MULTIPLE_H1"],
@@ -81,5 +84,14 @@ describe("diffRuns", () => {
       expect.objectContaining({ url: targetUrl, previous: 8, current: null, delta: null, change: "removed" }),
       expect.objectContaining({ url: "https://one.example/", previous: null, current: 3, delta: null, change: "added" })
     ]));
+  });
+
+  it("does not report schema casing changes as additions or removals", () => {
+    const targetUrl = "https://target.example/";
+    const result = diffRuns(
+      { id: "prior", createdAt: "2026-07-14T00:00:00.000Z", targetUrl, competitorUrls: ["https://one.example/"], queryLabel: null, rankObservations: {}, analyses: [makeAnalysis(targetUrl, { schemaTypes: ["FAQPage"] })] },
+      { targetUrl, competitorUrls: ["https://one.example/"], queryLabel: null, rankObservations: {}, analyses: [makeAnalysis(targetUrl, { schemaTypes: ["faqpage"] })] }
+    );
+    expect(result.schemaChanges).toEqual([]);
   });
 });

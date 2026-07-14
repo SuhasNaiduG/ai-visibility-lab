@@ -5,7 +5,7 @@ import {
   type UrlSafetyEvidence
 } from "./safety.js";
 
-export const DEFAULT_CRAWLER_USER_AGENT = "AI-Visibility-Lab/0.1";
+export const DEFAULT_CRAWLER_USER_AGENT = "AI-Visibility-Lab/1.0";
 export const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
 export const DEFAULT_MAX_REDIRECTS = 5;
 

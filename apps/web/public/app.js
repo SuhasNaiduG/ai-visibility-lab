@@ -134,8 +134,8 @@ function renderGaps(gaps = []) {
     list.append(element("article", { className: `gap ${gap.priority ?? ""}` }, [
       element("div", { className: "tags" }, [gap.gapId, gap.metric, gap.priority, gap.effort].filter(Boolean).map((tag) => element("span", { className: "tag", text: tag }))),
       element("h3", { text: gap.whatDiffers }),
-      element("div", { className: "detail-grid" }, [labelled("Why it may matter", gap.whyItMayMatter), labelled("Implementation direction", gap.implementationDirection), labelled("Verification", gap.verificationMethod), labelled("Caution", gap.caution)]),
-      jsonDetails({ targetEvidence: gap.targetEvidence, competitorEvidence: gap.competitorEvidence }, "Comparison evidence")
+      element("div", { className: "detail-grid" }, [labelled("Competitor observation", gap.competitorObservation), labelled("Why it may matter", gap.whyItMayMatter), labelled("Implementation direction", gap.implementationDirection), labelled("Verification", gap.verificationMethod), labelled("Caution", gap.caution)]),
+      jsonDetails({ delta: gap.delta, targetEvidence: gap.targetEvidence, competitorEvidence: gap.competitorEvidence }, "Comparison evidence")
     ]));
   }
   return list;
@@ -150,8 +150,12 @@ function renderComparison(run, container) {
   ]));
   const definitions = new Map((comparison.metricDefinitions ?? []).map((item) => [item.key, item]));
   const metricKeys = comparison.matrix?.[0] ? Object.keys(comparison.matrix[0].metrics) : [];
+  const matrixRows = [
+    ["Manual rank observation (user supplied)", ...(comparison.matrix ?? []).map((row) => row.manualRankObservation)],
+    ...metricKeys.map((key) => [definitions.get(key)?.label ?? key, ...(comparison.matrix ?? []).map((row) => row.metrics[key])])
+  ];
   container.append(section("Normalized comparison matrix", [
-    table(["Metric", ...(comparison.matrix ?? []).map((row) => `${row.role}: ${row.url}`)], metricKeys.map((key) => [definitions.get(key)?.label ?? key, ...(comparison.matrix ?? []).map((row) => row.metrics[key])])),
+    table(["Metric", ...(comparison.matrix ?? []).map((row) => `${row.role}: ${row.url}`)], matrixRows),
     jsonDetails(comparison.metricDefinitions ?? [], "Metric explanations")
   ]));
   container.append(section("Evidence-backed target gaps", renderGaps(comparison.targetGaps)));
@@ -232,10 +236,14 @@ $("#compare-form").addEventListener("submit", async (event) => {
   setBusy(form, true, "Analyzing each site through the same evidence pipeline…");
   try {
     const values = Object.fromEntries(new FormData(form));
-    const competitorUrls = [1, 2, 3].map((index) => String(values[`competitorUrl${index}`] ?? "").trim()).filter(Boolean);
+    const competitors = [1, 2, 3].map((index) => ({
+      url: String(values[`competitorUrl${index}`] ?? "").trim(),
+      rank: values[`competitorRank${index}`]
+    })).filter((entry) => entry.url);
+    const competitorUrls = competitors.map((entry) => entry.url);
     const rankObservations = {};
     if (values.targetRank) rankObservations[String(values.targetUrl)] = Number(values.targetRank);
-    competitorUrls.forEach((url, index) => { const rank = values[`competitorRank${index + 1}`]; if (rank) rankObservations[url] = Number(rank); });
+    competitors.forEach(({ url, rank }) => { if (rank) rankObservations[url] = Number(rank); });
     const payload = { targetUrl: values.targetUrl, competitorUrls, queryLabel: values.queryLabel || undefined, rankObservations: Object.keys(rankObservations).length ? rankObservations : undefined };
     const run = await api("/api/compare", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
     renderComparison(run, $("#compare-results"));
