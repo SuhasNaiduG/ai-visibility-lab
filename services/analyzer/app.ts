@@ -117,11 +117,11 @@ export function createApp(overrides: Partial<AppDependencies> = {}): Express {
 
   app.use((
     error: unknown,
-    _request: Request,
+    request: Request,
     response: Response,
     _next: NextFunction
   ): void => {
-    const mapped = mapError(error);
+    const mapped = mapError(error, request);
     response.status(mapped.status).json({
       error: {
         code: mapped.code,
@@ -146,13 +146,21 @@ function validationError(details: unknown): ApiError {
   return new ApiError(400, "INVALID_REQUEST", "Request validation failed", details);
 }
 
-function mapError(error: unknown): ApiError {
+function mapError(error: unknown, request?: Pick<Request, "method" | "path">): ApiError {
   if (error instanceof ApiError) return error;
   if (error instanceof CrawlerError) {
     return new ApiError(error.httpStatus, error.code, error.message, error.details);
   }
   if (error instanceof RunStoreError) {
-    return new ApiError(500, "RUN_STORE_ERROR", "Run history is unavailable", { code: error.code });
+    const comparisonSave = request?.method === "POST" && request.path === "/api/compare";
+    return new ApiError(
+      500,
+      "RUN_STORE_ERROR",
+      comparisonSave
+        ? "The comparison completed, but the run could not be saved."
+        : "Run history is unavailable",
+      { code: error.code }
+    );
   }
   if (isJsonSyntaxError(error)) {
     return new ApiError(400, "INVALID_JSON", "Request body contains invalid JSON");

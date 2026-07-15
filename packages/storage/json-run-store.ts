@@ -885,9 +885,7 @@ function recordAlignmentIssues(run: RunRecord, previousRun?: RunRecord, requireP
       if (!sameUrlOrder(run.history.competitorChanges.addedUrls, expectedAdded)) issues.push("history added competitor URLs are inconsistent");
       if (!sameUrlOrder(run.history.competitorChanges.removedUrls, expectedRemoved)) issues.push("history removed competitor URLs are inconsistent");
       const expectedHistory = diffRuns(previousRun, run);
-      if (!equalJson(historySemanticView(run.history), historySemanticView(expectedHistory))) {
-        issues.push("history semantic payload does not match the deterministic diff of the referenced run");
-      }
+      issues.push(...historySemanticIssues(run.history, expectedHistory));
     }
     for (const change of run.history.findingChanges) {
       validateHistorySiteReference(change, run.sites, issues, "finding change");
@@ -897,6 +895,17 @@ function recordAlignmentIssues(run: RunRecord, previousRun?: RunRecord, requireP
     }
   }
   return issues;
+}
+
+function historySemanticIssues(
+  actual: NonNullable<RunRecord["history"]>,
+  expected: NonNullable<RunRecord["history"]>
+): string[] {
+  const actualView = historySemanticView(actual);
+  const expectedView = historySemanticView(expected);
+  return (Object.keys(expectedView) as Array<keyof typeof expectedView>)
+    .filter((key) => !equalJson(actualView[key], expectedView[key]))
+    .map((key) => `history ${key} does not match the deterministic diff of the referenced run`);
 }
 
 function historySemanticView(history: NonNullable<RunRecord["history"]>) {

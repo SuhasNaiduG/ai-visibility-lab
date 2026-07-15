@@ -6,7 +6,7 @@ import type { Finding } from "../../packages/rules/types.js";
 import { JsonRunStore } from "../../packages/storage/json-run-store.js";
 import type { AnalysisResult } from "../../services/analyzer/analyze.js";
 import { compareAndSaveRun } from "../../services/analyzer/compare.js";
-import { makeAnalysis } from "../helpers/analysis.js";
+import { makeAnalysis, makeCoverage } from "../helpers/analysis.js";
 
 function finding(ruleId: string): Finding {
   return {
@@ -25,6 +25,63 @@ function finding(ruleId: string): Finding {
 }
 
 describe("compareAndSaveRun", () => {
+  it("persists the reported target and competitor request when nested coverage object key order differs", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "ai-visibility-compare-history-order-"));
+    const store = new JsonRunStore(join(directory, "runs.json"));
+    const coverage = makeCoverage({
+      contentSection: {
+        present: true,
+        count: 1,
+        terms: ["faq"],
+        signals: [{
+          kind: "content-section",
+          term: "faq",
+          normalizedTerm: "faq",
+          sourceField: "visibleText",
+          snippet: "Frequently asked questions",
+          method: "pattern",
+          heuristic: true
+        }]
+      }
+    });
+    let version = 1;
+    const analyze = vi.fn(async (url: string) => {
+      const normalized = new URL(url).toString();
+      const reorderedCoverage = {
+        contentSection: coverage.contentSection,
+        contact: coverage.contact,
+        trust: coverage.trust,
+        location: coverage.location,
+        service: coverage.service,
+        entity: coverage.entity
+      };
+      return makeAnalysis(normalized, {
+        requestedUrl: url,
+        coverage: version === 1 ? coverage : reorderedCoverage
+      }) as unknown as AnalysisResult;
+    });
+    const input = {
+      targetUrl: "https://425clearaligners.com",
+      competitorUrls: ["https://porth.io/education-hub/top-bellevue-orthodontist/"]
+    };
+
+    const first = await compareAndSaveRun(input, { store, analyze });
+    version = 2;
+    const second = await compareAndSaveRun(input, { store, analyze });
+
+    expect(second.history).toEqual(expect.objectContaining({ previousRunId: first.id }));
+    expect(second.history?.contentCountChanges).toEqual([]);
+    expect(second.history?.competitorChanges.observedChanges).toEqual([]);
+
+    const tracked = await compareAndSaveRun({
+      ...input,
+      competitorUrls: ["https://porth.io/education-hub/top-bellevue-orthodontist/?utm_source=demo"]
+    }, { store, analyze });
+
+    expect(tracked.history).toEqual(expect.objectContaining({ previousRunId: second.id }));
+    expect((await store.list()).map((run) => run.id)).toEqual([tracked.id, second.id, first.id]);
+  });
+
   it("analyzes every site through one function, saves runs, and returns the prior-run diff", async () => {
     const directory = await mkdtemp(join(tmpdir(), "ai-visibility-compare-service-"));
     const store = new JsonRunStore(join(directory, "runs.json"));

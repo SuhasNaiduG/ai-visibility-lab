@@ -2,6 +2,7 @@ import request from "supertest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CrawlerError } from "../../packages/crawler/errors.js";
 import { parsePage } from "../../packages/parser/page.js";
+import { RunStoreError } from "../../packages/storage/json-run-store.js";
 import type { RunRecord, RunStore } from "../../packages/storage/types.js";
 import { createApp } from "../../services/analyzer/app.js";
 import type { AnalysisResult } from "../../services/analyzer/analyze.js";
@@ -193,6 +194,25 @@ describe("analyzer API", () => {
     expect(response.status).toBe(200);
     expect(response.body).toEqual(expect.objectContaining({ id: "run-1", comparison: expect.objectContaining({ targetUrl: "https://target.example/" }) }));
     expect(compareAndSave).toHaveBeenCalledWith(payload);
+  });
+
+  it("distinguishes a completed comparison save failure from a history loading failure", async () => {
+    compareAndSave.mockRejectedValue(new RunStoreError("INVALID_RECORD", "Record validation failed"));
+    const comparison = await request(app()).post("/api/compare").send({
+      targetUrl: "https://target.example",
+      competitorUrls: ["https://competitor.example"]
+    });
+    expect(comparison.status).toBe(500);
+    expect(comparison.body.error).toEqual({
+      code: "RUN_STORE_ERROR",
+      message: "The comparison completed, but the run could not be saved.",
+      details: { code: "INVALID_RECORD" }
+    });
+
+    store.list.mockRejectedValue(new RunStoreError("CORRUPT_STORE", "History cannot be read"));
+    const history = await request(app()).get("/api/runs");
+    expect(history.status).toBe(500);
+    expect(history.body.error.message).toBe("Run history is unavailable");
   });
 
   it("lists, opens, and locates saved runs and returns 404 when missing", async () => {
