@@ -599,14 +599,28 @@ function renderComparison(run, container) {
   container.append(jsonDetails(run, "Complete saved run JSON"));
 }
 
-async function loadHistory() {
+let historyRequestSequence = 0;
+
+function beginHistoryRequest(error) {
+  hideError(error);
+  historyRequestSequence += 1;
+  return historyRequestSequence;
+}
+
+function isCurrentHistoryRequest(requestSequence) {
+  return requestSequence === historyRequestSequence;
+}
+
+async function loadRunHistory() {
   const results = $("#history-results");
   const error = $("#history-error");
-  hideError(error);
+  const requestSequence = beginHistoryRequest(error);
   clear(results);
   results.append(element("p", { className: "empty", text: "Loading saved runs…" }));
   try {
     const runs = await api("/api/runs");
+    if (!isCurrentHistoryRequest(requestSequence)) return;
+    hideError(error);
     clear(results);
     if (!runs.length) {
       results.append(element("p", { className: "empty", text: "No comparison runs are saved yet." }));
@@ -616,11 +630,17 @@ async function loadHistory() {
     for (const run of runs) {
       const open = element("button", { className: "history-open", text: "Open run", attributes: { type: "button" } });
       open.addEventListener("click", async () => {
+        const openRequestSequence = beginHistoryRequest(error);
         open.disabled = true;
         try {
-          renderComparison(await api(`/api/runs/${encodeURIComponent(run.id)}`), results);
+          const savedRun = await api(`/api/runs/${encodeURIComponent(run.id)}`);
+          if (!isCurrentHistoryRequest(openRequestSequence)) return;
+          hideError(error);
+          renderComparison(savedRun, results);
           results.scrollIntoView({ behavior: "smooth", block: "start" });
-        } catch (caught) { showError(error, caught); }
+        } catch (caught) {
+          if (isCurrentHistoryRequest(openRequestSequence)) showError(error, caught);
+        }
         finally { open.disabled = false; }
       });
       list.append(element("article", { className: "history-item" }, [
@@ -628,7 +648,11 @@ async function loadHistory() {
       ]));
     }
     results.append(list);
-  } catch (caught) { clear(results); showError(error, caught); }
+  } catch (caught) {
+    if (!isCurrentHistoryRequest(requestSequence)) return;
+    clear(results);
+    showError(error, caught);
+  }
 }
 
 $$('.tab').forEach((button) => button.addEventListener("click", () => {
@@ -638,7 +662,7 @@ $$('.tab').forEach((button) => button.addEventListener("click", () => {
     panel.classList.toggle("active", active);
     panel.hidden = !active;
   });
-  if (button.dataset.panel === "history-panel") loadHistory();
+  if (button.dataset.panel === "history-panel") loadRunHistory();
 }));
 
 $("#analyze-form").addEventListener("submit", async (event) => {
@@ -673,11 +697,12 @@ $("#compare-form").addEventListener("submit", async (event) => {
     const payload = { targetUrl: values.targetUrl, competitorUrls, queryLabel: values.queryLabel || undefined, rankObservations: Object.keys(rankObservations).length ? rankObservations : undefined };
     const run = await api("/api/compare", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
     renderComparison(run, $("#compare-results"));
+    await loadRunHistory();
   } catch (caught) { showError(error, caught); }
   finally { setBusy(form, false); }
 });
 
-$("#refresh-history").addEventListener("click", loadHistory);
+$("#refresh-history").addEventListener("click", loadRunHistory);
 
 api("/health").then((health) => {
   const status = $("#health-status");
