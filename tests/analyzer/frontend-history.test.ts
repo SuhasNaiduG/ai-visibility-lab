@@ -130,6 +130,17 @@ describe("saved-run history UI", () => {
   });
 });
 
+describe("demo implementation and verification UI", () => {
+  it("keeps the proposal review boundary and fixture verification visible in the browser source", async () => {
+    const source = await readFile(new URL("../../apps/web/public/app.js", import.meta.url), "utf8");
+
+    expect(source).toContain("Proposal — requires factual and medical review before publication.");
+    expect(source).toContain("Fixture verification");
+    expect(source).toContain("CANONICAL_MISMATCH");
+    expect(source).toContain("INTERNAL_LINKS_LOW");
+  });
+});
+
 function findByClass(node: FakeNode, className: string): FakeNode | undefined {
   if (node.className.split(/\s+/u).includes(className)) return node;
   for (const child of node.children) {
