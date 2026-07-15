@@ -1188,7 +1188,23 @@ function sameUrlOrder(left: string[], right: string[]): boolean {
 }
 
 function equalJson(left: unknown, right: unknown): boolean {
-  return JSON.stringify(left) === JSON.stringify(right);
+  return stableJson(left) === stableJson(right);
+}
+
+function stableJson(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => stableJson(item)).join(",")}]`;
+  }
+  if (value !== null && typeof value === "object") {
+    const object = value as Record<string, unknown>;
+    const entries = Object.keys(object)
+      .filter((key) => object[key] !== undefined)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${stableJson(object[key])}`);
+    return `{${entries.join(",")}}`;
+  }
+  const encoded = JSON.stringify(value);
+  return encoded === undefined ? "null" : encoded;
 }
 
 function copySite(site: ComparisonSite): ComparisonSite {

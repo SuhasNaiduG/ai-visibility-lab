@@ -159,7 +159,7 @@ function mapError(error: unknown, request?: Pick<Request, "method" | "path">): A
       comparisonSave
         ? "The comparison completed, but the run could not be saved."
         : "Run history is unavailable",
-      { code: error.code }
+      { code: error.code, ...error.details }
     );
   }
   if (isJsonSyntaxError(error)) {

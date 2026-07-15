@@ -1,8 +1,11 @@
 import request from "supertest";
+import { mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CrawlerError } from "../../packages/crawler/errors.js";
 import { parsePage } from "../../packages/parser/page.js";
-import { RunStoreError } from "../../packages/storage/json-run-store.js";
+import { JsonRunStore, RunStoreError } from "../../packages/storage/json-run-store.js";
 import type { RunRecord, RunStore } from "../../packages/storage/types.js";
 import { createApp } from "../../services/analyzer/app.js";
 import type { AnalysisResult } from "../../services/analyzer/analyze.js";
@@ -197,7 +200,9 @@ describe("analyzer API", () => {
   });
 
   it("distinguishes a completed comparison save failure from a history loading failure", async () => {
-    compareAndSave.mockRejectedValue(new RunStoreError("INVALID_RECORD", "Record validation failed"));
+    compareAndSave.mockRejectedValue(new RunStoreError("INVALID_RECORD", "Record validation failed", {
+      issues: [{ path: ["history", "contentCountChanges", 0], received: "rejected value" }]
+    }));
     const comparison = await request(app()).post("/api/compare").send({
       targetUrl: "https://target.example",
       competitorUrls: ["https://competitor.example"]
@@ -206,13 +211,45 @@ describe("analyzer API", () => {
     expect(comparison.body.error).toEqual({
       code: "RUN_STORE_ERROR",
       message: "The comparison completed, but the run could not be saved.",
-      details: { code: "INVALID_RECORD" }
+      details: {
+        code: "INVALID_RECORD",
+        issues: [{ path: ["history", "contentCountChanges", 0], received: "rejected value" }]
+      }
     });
 
     store.list.mockRejectedValue(new RunStoreError("CORRUPT_STORE", "History cannot be read"));
     const history = await request(app()).get("/api/runs");
     expect(history.status).toBe(500);
     expect(history.body.error.message).toBe("Run history is unavailable");
+  });
+
+  it("persists, reopens, and histories comparisons through every run endpoint", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "ai-visibility-api-compare-"));
+    const persistentStore = new JsonRunStore(join(directory, "runs.json"));
+    let version = 1;
+    const persistentApp = createApp({
+      runStore: persistentStore,
+      analyze: async (url) => makeAnalysis(new URL(url).toString(), {
+        wordCount: version === 1 ? 250 : 300,
+        indexability: version === 1
+          ? { status: "explicit-index", isIndexable: true, reason: "First observed reason." }
+          : { reason: "Second observed reason.", isIndexable: true, status: "explicit-index" }
+      }) as AnalysisResult
+    });
+    const payload = {
+      targetUrl: "https://target.example/",
+      competitorUrls: ["https://competitor.example/"]
+    };
+
+    const first = await request(persistentApp).post("/api/compare").send(payload);
+    expect(first.status).toBe(200);
+    version = 2;
+    const second = await request(persistentApp).post("/api/compare").send(payload);
+    expect(second.status).toBe(200);
+    expect(second.body.history).toEqual(expect.objectContaining({ previousRunId: first.body.id }));
+    expect((await request(persistentApp).get("/api/runs")).body).toHaveLength(2);
+    expect((await request(persistentApp).get(`/api/runs/${second.body.id}`)).body.id).toBe(second.body.id);
+    expect((await request(persistentApp).get("/api/runs/latest").query({ targetUrl: payload.targetUrl })).body.id).toBe(second.body.id);
   });
 
   it("lists, opens, and locates saved runs and returns 404 when missing", async () => {
