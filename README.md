@@ -21,7 +21,7 @@ It does not call an AI API, predict rankings, simulate a proprietary search syst
 - Compares one target with one to three competitors through the same analyzer path, with raw matrix values and evidence-backed target gaps/advantages.
 - Accepts optional manual rank observations and labels them as manual; it does not collect rankings automatically.
 - Saves comparison runs in an atomic JSON-file store and diffs later matching runs without claiming causation.
-- Serves a minimal browser interface for analysis, comparison, findings, limitations, and run history.
+- Serves a minimal browser interface for analysis, comparison, normalized evidence, reviewed implementation proposals, fixture verification, limitations, and run history.
 
 ## Architecture
 
@@ -142,12 +142,22 @@ Generated history is written under `data/` and ignored by Git. Only `data/.gitke
 
 ## Roadmap
 
-1. Replace JSON storage with SQLite or PostgreSQL behind the existing store interface.
-2. Pin outbound connections to validated DNS results and add deployment-level egress controls.
-3. Add an opt-in rank provider behind the existing provider interface or owned-site Search Console integration.
-4. Add multi-page/site crawling with crawl budgets and robots-policy interpretation.
-5. Add first-party analytics connectors with explicit provenance.
-6. Only after deterministic evidence is mature, add optional AI interpretation as a separate, clearly labeled layer.
+### Working now
+
+- Single-page analysis, competitor comparison, evidence-backed findings, a factual-review implementation proposal, deterministic before/after fixture verification, and saved run history.
+
+### Future modules
+
+All items below are **Planned — not enabled in this prototype.**
+
+- Multi-Page Crawling: inspect a bounded set of pages.
+- AI Interpretation: optional interpretation over preserved deterministic evidence.
+- Automated Rank Tracking: verified external observations.
+- PDF Reports: export an evidence report.
+- Database Storage: durable multi-user persistence.
+- Advanced E-E-A-T: additional transparent evidence checks.
+- Advanced Analyzer Library: more deterministic analyzers.
+- Interface Redesign: broader presentation work.
 
 ## Screenshots
 

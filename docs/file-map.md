@@ -9,7 +9,7 @@ This map identifies the exact ownership boundary for each feature. Keep determin
 | `services/analyzer/index.ts` | Reads `PORT` and starts Express. | Changing process startup or adding graceful shutdown. |
 | `services/analyzer/app.ts` | HTTP routes, strict request validation, static hosting, dependency injection, and safe error mapping. | Adding an endpoint, changing status behavior, or composing a new service. |
 | `apps/web/public/index.html` | Accessible forms, workflow tabs, and result containers. | Adding a user input or a new result section. |
-| `apps/web/public/app.js` | API calls, progress/error states, and structured result rendering. | Changing browser interaction or rendering a new API field. |
+| `apps/web/public/app.js` | API calls, progress/error states, structured result rendering, reviewed proposal template, and fixture-verification presentation. | Changing browser interaction or rendering a new API field. |
 | `apps/web/public/styles.css` | Responsive visual presentation. | Changing layout, typography, tables, cards, or mobile behavior. |
 
 ## Deterministic analysis path
@@ -23,9 +23,9 @@ This map identifies the exact ownership boundary for each feature. Keep determin
 | `packages/crawler/resources.ts` | Root `robots.txt` and conventional `sitemap.xml` checks. | Adding content validation, robots-declared sitemap discovery, or resource-specific parsing. |
 | `packages/crawler/errors.ts` | Stable crawler error codes and HTTP mappings. | Adding a safe, externally visible acquisition failure type. |
 | `packages/parser/page.ts` | Coordinates metadata, canonical, robots, headings, JSON-LD, media, social, and page-level extraction. | Adding a directly observed page field. Extend `ParsedPage` and its tests together. |
-| `packages/parser/text.ts` | Visible-text normalization, sentence/word/question helpers. | Changing deterministic text visibility or counting rules. |
+| `packages/parser/text.ts` | Visible-text normalization, sentence/word/question helpers and readable-question filtering. | Changing deterministic text visibility or counting rules. |
 | `packages/parser/links.ts` | Link resolution, exact-host internal/external classification, destinations, domains, and anchor summaries. | Changing link classification or link evidence. |
-| `packages/entities/extract.ts` | Inspectable entity/service/location/trust/contact/content-section patterns and sources. | Adding a transparent retrieval/coverage heuristic. Do not hide semantic weights here. |
+| `packages/entities/extract.ts` | Inspectable entity/service/location/trust/contact/content-section patterns and sources, including placeholder/fragment rejection. | Adding a transparent retrieval/coverage heuristic. Do not hide semantic weights here. |
 | `packages/entities/types.ts` | Coverage input, signal, source, and dimension contracts. | Adding a coverage dimension or provenance field. |
 | `services/analyzer/analyze.ts` | One-page orchestration: fetch, parse, resources, coverage/rules, and raw evidence. | Adding an analysis stage or changing environment option wiring. |
 

@@ -520,3 +520,43 @@ This is the exact 22-file focused-fix scope. The exact commit hash is reported i
 - Future AI interpretation: create `packages/interpretation/` after deterministic outputs, call it only after analysis/comparison, preserve evidence unchanged, and expose it as a separately labeled opt-in response. Exact contract/test/doc guidance is in `docs/file-map.md`.
 
 `docs/file-map.md` is the maintained ownership map and should be updated whenever a boundary moves.
+
+---
+
+## Rooz prototype stabilization (2026-07-15)
+
+### Comparison persistence root cause and correction
+
+`POST /api/compare` completed its analysis but was rejected while saving with `INVALID_RECORD`. The saved-record validator recomputed history from schema-normalized data while the service had created history from the in-memory data. Nested semantic objects with an equivalent value but a different property insertion order compared unequal through `JSON.stringify`, which made the recomputed history diverge.
+
+`packages/comparison/diff.ts` now uses stable JSON semantics for observed-field equality: object keys are sorted recursively, `undefined` object properties are omitted as JSON does, and array order remains meaningful. `packages/storage/json-run-store.ts` preserves strict semantic validation and reports the divergent top-level history section. `services/analyzer/app.ts` now distinguishes an analysis/comparison success that could not be saved from a history-load failure: “The comparison completed, but the run could not be saved.” Deterministic orchestration regression coverage exercises the target/competitor reproduction shape, clean/tracked competitor identities, saving, listing, reopening, and second-run history.
+
+### Visible evidence normalization
+
+`packages/parser/text.ts` decodes common HTML/numeric entities, strips encoded markup, enforces a 220-character/30-word readable-question boundary, requires an interrogative/auxiliary question structure, and deduplicates normalized values. `packages/parser/page.ts` applies it consistently to headings, visible text, and direct answers. `packages/entities/extract.ts` rejects form placeholders such as `YOUR_STREET_ADDRESS` and `YOUR_ZIP` plus location sentence fragments such as `Bellevue You` and `Sammamish. We`. Raw page evidence, source URL, selector, and snippets remain available through existing analysis and comparison evidence structures.
+
+### Demo vertical slice
+
+The comparison screen now renders an **Implementation workspace** for the first evidence-backed target gap. It includes current evidence, direction, verification checklist, an editable HTML artifact, and the mandatory review label: **Proposal — requires factual and medical review before publication.** It never modifies a live site.
+
+The same screen renders **Fixture verification** from the existing deterministic `fixtures/verification/original.html` and `corrected.html` proof. Stable resolved IDs are `CANONICAL_MISMATCH`, `HEADING_MULTIPLE_H1`, `HEADING_LEVEL_JUMP`, `HEADING_EMPTY`, `JSONLD_INVALID`, and `IMAGE_ALT_MISSING`; `INTERNAL_LINKS_LOW` remains unchanged; no new fixture finding is asserted. `docs/demo-guide.md` documents the exact demo sequence.
+
+### Commits and verification
+
+| Commit | Scope |
+|---|---|
+| `ba9df8b` | Resolve comparison run validation failure. |
+| `2d1212b` | Normalize visible question and topic evidence. |
+| `4a005d2` | Complete evidence implementation verification demo. |
+
+Before each commit, `npm test` and `npm run build` passed. The final feature gate passed 18 test files / 122 tests, strict TypeScript compilation, `node --check apps/web/public/app.js`, and `git diff --check`.
+
+### Exact future edit locations
+
+- History equality and diff logic: `packages/comparison/diff.ts`.
+- Persisted semantic validation: `packages/storage/json-run-store.ts`.
+- Comparison persistence error wording: `services/analyzer/app.ts`.
+- Question cleanup: `packages/parser/text.ts` and `packages/parser/page.ts`.
+- Placeholder/topic cleanup: `packages/entities/extract.ts`.
+- Proposal, fixture verification, history, and roadmap presentation: `apps/web/public/app.js`, `index.html`, and `styles.css`.
+- Fixture proof: `fixtures/verification/` and `tests/verification/before-after.test.ts`.

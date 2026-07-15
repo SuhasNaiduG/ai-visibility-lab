@@ -411,3 +411,25 @@ Prevent unusable retrievals from becoming competitor conclusions while preservin
 ### Engineering principle
 
 Retrieval evidence may be incomplete without being hidden. Preserve it for inspection, but do not turn an unusable page into a benchmark, a resolved finding, or a rank-correlation claim.
+
+---
+
+## Milestone 9 — Rooz prototype stabilization
+
+### Accomplishments
+
+* Fixed comparison persistence validation without weakening semantic storage checks.
+* Normalized visible question evidence and excluded obvious placeholder or sentence-fragment topics.
+* Exposed the reviewed implementation artifact and existing deterministic fixture verification in the browser comparison workflow.
+* Added a clear Working Now versus Planned roadmap and a short video guide.
+
+### Verification
+
+* 18 test files / 122 tests passed.
+* Strict TypeScript build and browser JavaScript syntax check passed.
+
+### Commits
+
+* `ba9df8b fix: resolve comparison run validation failure`
+* `2d1212b fix: normalize visible question and topic evidence`
+* `4a005d2 feat: complete evidence implementation verification demo`
