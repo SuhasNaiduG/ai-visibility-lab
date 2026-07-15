@@ -346,7 +346,7 @@ function addSignal(
 ): void {
   const term = collapseWhitespace(signal.term);
 
-  if (!term) {
+  if (!term || isPlaceholder(term) || isMalformedLocation(signal.kind, term)) {
     return;
   }
 
@@ -365,6 +365,21 @@ function addSignal(
   if (!duplicate) {
     signals.push(complete);
   }
+}
+
+function isPlaceholder(term: string): boolean {
+  return /\b(?:your|enter|insert)\s*(?:street|zip|postal|address|city|state|phone|email)\b/iu.test(
+    term.replace(/[_-]+/gu, " ")
+  );
+}
+
+function isMalformedLocation(kind: CoverageSignalKind, term: string): boolean {
+  if (kind !== "location") {
+    return false;
+  }
+
+  const normalized = term.replace(/[.,;:]+$/gu, "");
+  return /\b(?:you|we|our|the|a|an|and|or)$/iu.test(normalized);
 }
 
 function buildDimension(

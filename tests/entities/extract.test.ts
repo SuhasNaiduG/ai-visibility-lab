@@ -26,4 +26,21 @@ describe("extractCoverage", () => {
     expect(coverage.contact.present).toBe(true);
     expect(coverage.service.signals[0]).toEqual(expect.objectContaining({ sourceField: expect.any(String), heuristic: expect.any(Boolean) }));
   });
+
+  it("excludes placeholder and sentence-fragment locations from visible evidence", () => {
+    const coverage = extractCoverage({
+      pageUrl: "https://example.com/",
+      sources: [{
+        field: "visibleText",
+        text: "Visit us in Bellevue You. We are also located in Sammamish. We can help."
+      }],
+      jsonLdBlocks: [{
+        "@type": "LocalBusiness",
+        address: { postalCode: "YOUR_ZIP", streetAddress: "YOUR_STREET_ADDRESS" }
+      }],
+      links: []
+    });
+
+    expect(coverage.location.terms).toEqual([]);
+  });
 });

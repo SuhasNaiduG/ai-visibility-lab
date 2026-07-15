@@ -105,4 +105,19 @@ describe("parsePage", () => {
     expect(result.jsonLdBlocks).toEqual([]);
     expect(result.schemaTypes).toEqual([]);
   });
+
+  it("keeps only readable question evidence", () => {
+    const result = parsePage(`
+      <h2>Who is Bellevue&#039;s top orthodontist?</h2>
+      <h2>&lt;span class=&quot;question&quot;&gt;What is the average cost of braces?&lt;/span&gt;</h2>
+      <nav>Home Services About Contact Blog Testimonials Schedule a consultation Are braces important for kids?</nav>
+      <p>Rooz, a board certified orthodontist, offer?</p>
+      <p>What is the best treatment option for a very long list of navigation terms that should never be treated as a meaningful user question because it contains far too much unrelated site chrome and filler text for a comparison?</p>
+    `, "https://example.com");
+
+    expect(result.detectedQuestions).toEqual([
+      "Who is Bellevue's top orthodontist?",
+      "What is the average cost of braces?"
+    ]);
+  });
 });

@@ -70,5 +70,59 @@ export function splitSentences(text: string): string[] {
 }
 
 export function extractQuestions(text: string): string[] {
-  return splitSentences(text).filter((sentence) => sentence.endsWith("?"));
+  const readableText = normalizeVisibleText(decodeHtmlEntities(text)).replace(
+    /<[^>]*>/gu,
+    ""
+  );
+
+  return splitSentences(readableText)
+    .map(normalizeQuestion)
+    .filter((question): question is string => question !== null);
+}
+
+/**
+ * Keeps the question inventory limited to short, readable questions. Page text
+ * often contains encoded markup, navigation runs, and form placeholders that
+ * happen to end in a question mark; those are not useful comparison evidence.
+ */
+export function normalizeQuestion(value: string): string | null {
+  const question = normalizeVisibleText(decodeHtmlEntities(value))
+    .replace(/<[^>]*>/gu, "")
+    .replace(/\s+\?/gu, "?");
+
+  if (!question.endsWith("?") || question.length > 220) {
+    return null;
+  }
+
+  const wordCount = countWords(question);
+  if (wordCount < 2 || wordCount > 30) {
+    return null;
+  }
+
+  return /^(?:what|when|where|which|who|whom|whose|why|how|is|are|was|were|can|could|do|does|did|will|would|should|may|might|have|has|had)\b/iu.test(
+    question
+  )
+    ? question
+    : null;
+}
+
+function decodeHtmlEntities(value: string): string {
+  return value
+    .replace(/&#x([\da-f]+);/giu, (_, hex: string) =>
+      String.fromCodePoint(Number.parseInt(hex, 16))
+    )
+    .replace(/&#(\d+);/gu, (_, decimal: string) =>
+      String.fromCodePoint(Number.parseInt(decimal, 10))
+    )
+    .replace(/&(quot|apos|amp|lt|gt|nbsp);/giu, (_, entity: string) => {
+      const entities: Record<string, string> = {
+        quot: '"',
+        apos: "'",
+        amp: "&",
+        lt: "<",
+        gt: ">",
+        nbsp: " "
+      };
+      return entities[entity.toLocaleLowerCase("en-US")] ?? "";
+    });
 }

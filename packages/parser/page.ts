@@ -11,6 +11,7 @@ import {
   countWords,
   extractQuestions,
   extractVisibleText,
+  normalizeQuestion,
   normalizeVisibleText,
   splitSentences
 } from "./text.js";
@@ -248,10 +249,12 @@ export function parsePage(html: string, pageUrl: string): ParsedPage {
   ]);
   const detectedQuestions = uniqueCaseInsensitive([
     ...headingHierarchy
-      .map((heading) => heading.text)
-      .filter((text) => text.endsWith("?")),
+      .map((heading) => normalizeQuestion(heading.text))
+      .filter((question): question is string => question !== null),
     ...extractQuestions(visibleText),
-    ...directAnswers.map((answer) => answer.question)
+    ...directAnswers
+      .map((answer) => normalizeQuestion(answer.question))
+      .filter((question): question is string => question !== null)
   ]);
 
   const images: ImageItem[] = [];
@@ -608,9 +611,9 @@ function extractHtmlDirectAnswers(
   const answers: DirectAnswer[] = [];
 
   headingElements.forEach((element, index) => {
-    const question = normalizeVisibleText($(element).text());
+    const question = normalizeQuestion($(element).text());
 
-    if (!question.endsWith("?")) {
+    if (!question) {
       return;
     }
 
@@ -658,9 +661,11 @@ function extractJsonLdDirectAnswers(blocks: unknown[]): DirectAnswer[] {
         ? firstString(acceptedAnswer.text, acceptedAnswer.name)
         : null;
 
-      if (question && answer) {
+      const normalizedQuestion = question ? normalizeQuestion(question) : null;
+
+      if (normalizedQuestion && answer) {
         answers.push({
-          question: normalizeVisibleText(question),
+          question: normalizedQuestion,
           answer: normalizeVisibleText(answer),
           questionSelector:
             `script[type="application/ld+json"]:nth-of-type(${blockIndex + 1}) ${path}`,
