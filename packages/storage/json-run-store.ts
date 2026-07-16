@@ -753,24 +753,52 @@ export class JsonRunStore implements RunStore {
 function normalizeLegacyRuns(runs: LegacyRunRecord[]): RunRecord[] {
   const normalized = runs.map((run) => normalizeLegacyRun(run));
   const byId = new Map(normalized.map((entry) => [entry.record.id, entry]));
-  return normalized.map((entry) => {
-    if (!entry.source.history) return { ...entry.record, verification: null };
-    const previous = byId.get(entry.source.history.previousRunId);
-    const recomputeHistory = entry.recomputedComparison
-      || previous?.recomputedComparison === true
-      || missesCurrentHistoryContract(entry.source.history);
-    if (!previous) throw new Error(`No stored run matches history reference ${entry.source.history.previousRunId}`);
-    const record = recomputeHistory ? {
-      ...entry.record,
-      history: diffRuns(previous.record, entry.record)
-    } : entry.record;
-    return {
-      ...record,
-      verification: recomputeHistory || !entry.source.verification
-        ? verifyResearchRuns(previous.record, record)
-        : record.verification
-    };
-  });
+  const completed = new Map<string, { record: RunRecord; migrated: boolean }>();
+  const visiting = new Set<string>();
+
+  const finalize = (entry: (typeof normalized)[number]): { record: RunRecord; migrated: boolean } => {
+    const existing = completed.get(entry.record.id);
+    if (existing) return existing;
+    if (visiting.has(entry.record.id)) throw new Error(`Circular history reference detected at ${entry.record.id}`);
+    visiting.add(entry.record.id);
+
+    let result: { record: RunRecord; migrated: boolean };
+    if (!entry.source.history) {
+      result = {
+        record: { ...entry.record, verification: null },
+        migrated: entry.recomputedComparison
+      };
+    } else {
+      const previousEntry = byId.get(entry.source.history.previousRunId);
+      if (!previousEntry) throw new Error(`No stored run matches history reference ${entry.source.history.previousRunId}`);
+      const previous = finalize(previousEntry);
+      const recomputeHistory = entry.recomputedComparison
+        || previous.migrated
+        || missesCurrentHistoryContract(entry.source.history);
+      const record = recomputeHistory ? {
+        ...entry.record,
+        history: diffRuns(previous.record, entry.record)
+      } : entry.record;
+      const recomputeVerification = recomputeHistory
+        || previous.migrated
+        || !entry.source.verification;
+      result = {
+        record: {
+          ...record,
+          verification: recomputeVerification
+            ? verifyResearchRuns(previous.record, record)
+            : record.verification
+        },
+        migrated: recomputeHistory || recomputeVerification
+      };
+    }
+
+    visiting.delete(entry.record.id);
+    completed.set(entry.record.id, result);
+    return result;
+  };
+
+  return normalized.map((entry) => finalize(entry).record);
 }
 
 export function validateRunRecord(record: unknown, previousRun?: RunRecord, requirePreviousRun = false): RunRecord {

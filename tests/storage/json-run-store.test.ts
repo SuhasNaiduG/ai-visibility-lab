@@ -386,6 +386,48 @@ describe("JsonRunStore", () => {
     expect(await readFile(file, "utf8")).toBe(legacyJson);
   });
 
+  it("propagates legacy verification normalization through later run history without rewriting", async () => {
+    const { file } = await temporaryStore();
+    let id = 0;
+    let tick = 0;
+    const store = new JsonRunStore(file, {
+      idFactory: () => `legacy-verification-${++id}`,
+      clock: () => new Date(Date.UTC(2026, 6, 15, 0, 0, tick++))
+    });
+    const first = await store.save(newRunInput());
+    const secondInput = runInputFromAnalyses(
+      makeAnalysis("https://target.example/", { title: "Second title", titleLength: 12 }),
+      [makeAnalysis("https://competitor.example/")]
+    );
+    const secondHistory = diffRuns(first, secondInput);
+    const second = await store.save(withVerification(first, secondInput, secondHistory));
+    const thirdInput = runInputFromAnalyses(
+      makeAnalysis("https://target.example/", { title: "Example service", titleLength: 15 }),
+      [makeAnalysis("https://competitor.example/")]
+    );
+    const thirdHistory = diffRuns(second, thirdInput);
+    const third = await store.save(withVerification(second, thirdInput, thirdHistory));
+
+    const legacyFile = JSON.parse(await readFile(file, "utf8"));
+    legacyFile.runs[1].verification = null;
+    legacyFile.runs[2].verification = verifyResearchRuns(
+      { ...second, verification: null },
+      { ...third, verification: null }
+    );
+    const legacyJson = `${JSON.stringify(legacyFile, null, 2)}\n`;
+    await writeFile(file, legacyJson, "utf8");
+
+    const reopenedStore = new JsonRunStore(file);
+    const reopenedSecond = await reopenedStore.get(second.id);
+    const reopenedThird = await reopenedStore.get(third.id);
+    expect(reopenedSecond?.verification).not.toBeNull();
+    expect(reopenedThird?.verification).toEqual(verifyResearchRuns(
+      reopenedSecond!,
+      { ...reopenedThird!, verification: null }
+    ));
+    expect(await readFile(file, "utf8")).toBe(legacyJson);
+  });
+
   it("rejects fabricated current history semantics on save and read", async () => {
     const { file } = await temporaryStore();
     let id = 0;
