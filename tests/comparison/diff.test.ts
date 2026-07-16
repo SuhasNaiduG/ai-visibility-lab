@@ -6,6 +6,7 @@ import { makeAnalysis } from "../helpers/analysis.js";
 function finding(ruleId: string): Finding {
   return {
     ruleId,
+    ruleVersion: "1.0.0",
     category: "heading-structure",
     problem: ruleId,
     evidence: [],
@@ -15,7 +16,9 @@ function finding(ruleId: string): Finding {
     verificationMethod: "Rerun",
     priority: "medium",
     effort: "low",
-    classification: "observation"
+    classification: "observation",
+    confidence: "high",
+    limitation: "Fixture limitation"
   };
 }
 

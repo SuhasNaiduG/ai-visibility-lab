@@ -28,6 +28,7 @@ describe("evaluateRules", () => {
 
     expect(ids).toEqual(expect.arrayContaining(["CANONICAL_MISMATCH", "HEADING_MULTIPLE_H1", "IMAGE_ALT_MISSING"]));
     expect(findings.find((finding) => finding.ruleId === "TITLE_LENGTH_SHORT")?.classification).toBe("editorial-heuristic");
+    expect(findings.every((finding) => finding.ruleVersion === "1.0.0" && finding.limitation.length > 0)).toBe(true);
     expect(findings.every((finding) => finding.evidence.every((item) => item.sourceUrl && item.fetchedAt))).toBe(true);
     expect(findings.find((finding) => finding.ruleId === "HEADING_MULTIPLE_H1")?.problem).toMatch(/not an automatic claim of harm/i);
   });

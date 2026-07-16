@@ -23,6 +23,7 @@ export type FindingCategory =
 
 export interface Finding {
   ruleId: string;
+  ruleVersion: string;
   category: FindingCategory;
   problem: string;
   evidence: Evidence[];
@@ -33,6 +34,8 @@ export interface Finding {
   priority: Priority;
   effort: Effort;
   classification: FindingClassification;
+  confidence: "high" | "medium" | "low";
+  limitation: string;
 }
 
 export interface AnalysisRuleInput extends ParsedPage {

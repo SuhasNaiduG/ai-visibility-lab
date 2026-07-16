@@ -19,6 +19,7 @@ import type {
   Evidence,
   Finding
 } from "../../packages/rules/types.js";
+import { runAnalyzerLibrary, type AnalyzerLibraryResult } from "../../packages/analyzers/index.js";
 
 export interface AnalysisResult extends AnalysisRuleInput {
   redirectObserved: boolean;
@@ -29,6 +30,7 @@ export interface AnalysisResult extends AnalysisRuleInput {
   siteResources: SiteResources;
   findings: Finding[];
   rawEvidence: Evidence[];
+  analyzerResults: AnalyzerLibraryResult;
 }
 
 export type AnalysisOptions = FetchOptions;
@@ -62,6 +64,7 @@ export async function analyzeUrl(
     sitemapXmlStatusCode: resources.sitemapXml.statusCode
   };
   const findings = evaluateRules(ruleInput);
+  const analyzerResults = runAnalyzerLibrary({ ...ruleInput, findings });
 
   return {
     ...ruleInput,
@@ -72,6 +75,7 @@ export async function analyzeUrl(
     sitemapXmlUrl: resources.sitemapXml.url,
     siteResources: resources,
     findings,
+    analyzerResults,
     rawEvidence: createRawEvidence(ruleInput)
   };
 }

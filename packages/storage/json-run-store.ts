@@ -38,6 +38,7 @@ const evidenceSchema = z.looseObject({
 
 const findingSchema = z.looseObject({
   ruleId: z.string().min(1),
+  ruleVersion: z.string().min(1).default("1.0.0"),
   category: z.enum(["crawl-indexability", "metadata", "heading-structure", "structured-data", "links-media", "answerability", "entity-coverage"]),
   problem: z.string().min(1),
   evidence: z.array(evidenceSchema),
@@ -47,7 +48,9 @@ const findingSchema = z.looseObject({
   verificationMethod: z.string().min(1),
   priority: z.enum(["high", "medium", "low"]),
   effort: z.enum(["low", "medium", "high"]),
-  classification: z.enum(["observation", "editorial-heuristic"])
+  classification: z.enum(["observation", "editorial-heuristic"]),
+  confidence: z.enum(["high", "medium", "low"]).default("medium"),
+  limitation: z.string().min(1).default("Legacy finding: limitation text was not recorded at creation time.")
 });
 
 const coverageSignalSchema = z.looseObject({

@@ -38,9 +38,13 @@ export function evaluateRules(input: AnalysisRuleInput): Finding[] {
     fetchedAt: input.fetchedAt
   });
   const add = (details: FindingDetails): void => {
+    const classification = details.classification ?? "observation";
     findings.push({
       ...details,
-      classification: details.classification ?? "observation"
+      ruleVersion: "1.0.0",
+      classification,
+      confidence: classification === "observation" ? "high" : "medium",
+      limitation: "This finding describes evidence observed on the fetched page. Missing page evidence does not prove the underlying business fact or capability is absent."
     });
   };
 

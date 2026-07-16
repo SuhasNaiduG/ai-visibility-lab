@@ -59,7 +59,8 @@ const analysisResult: AnalysisResult = {
   sitemapXmlUrl: `${pageUrl}sitemap.xml`,
   siteResources: { robotsTxt: resource("robots.txt"), sitemapXml: resource("sitemap.xml") },
   findings: [],
-  rawEvidence: []
+  rawEvidence: [],
+  analyzerResults: { libraryVersion: "1.0.0", observations: [] }
 };
 
 function runRecord(): RunRecord {
