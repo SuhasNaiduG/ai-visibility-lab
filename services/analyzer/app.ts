@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import express, {
   type Express,
@@ -41,6 +43,24 @@ import { JsonVisibilityObservationStore, VisibilityObservationStoreError } from 
 import type { VisibilityObservationStore } from "../../packages/visibility/types.js";
 import { SqliteRunStore } from "../../packages/storage/sqlite-run-store.js";
 import { buildCompleteResearchReport, researchReportCsv, researchReportJson, researchReportMarkdown } from "../../packages/reports/report.js";
+import { connectorDefinitions } from "../../packages/analytics/connectors.js";
+import { previewCsv, CsvImportError } from "../../packages/analytics/csv.js";
+import { importAnalyticsCsv } from "../../packages/analytics/import-service.js";
+import { JsonAnalyticsStore } from "../../packages/analytics/json-analytics-store.js";
+import { SqliteAnalyticsStore } from "../../packages/analytics/sqlite-analytics-store.js";
+import type { AnalyticsStore, ProjectReference, SearchPerformanceRecord } from "../../packages/analytics/types.js";
+import { AnalyticsStoreError } from "../../packages/analytics/validation.js";
+import {
+  analyticsExportQuerySchema,
+  analyticsIdParamsSchema,
+  csvImportRequestSchema,
+  csvPreviewRequestSchema,
+  metricQuerySchema,
+  opportunityStatusRequestSchema,
+  projectQuerySchema
+} from "../../packages/analytics/api-schemas.js";
+import { buildSearchPerformanceDetail } from "../../packages/analytics/detail.js";
+import { buildGrowthAnalyticsReport, growthReportCsv, growthReportJson, growthReportMarkdown } from "../../packages/analytics/report.js";
 
 export interface AppDependencies {
   analyze: (url: string) => Promise<AnalysisResult>;
@@ -50,6 +70,7 @@ export interface AppDependencies {
   aiProvider: AiInterpretationProvider | null;
   aiConfig: AiInterpretationConfig;
   visibilityStore: VisibilityObservationStore;
+  analyticsStore: AnalyticsStore;
 }
 
 class ApiError extends Error {
@@ -73,9 +94,11 @@ export function createApp(overrides: Partial<AppDependencies> = {}): Express {
   const aiProvider = overrides.aiProvider ?? null;
   const aiConfig = overrides.aiConfig ?? loadAiInterpretationConfig();
   const visibilityStore = overrides.visibilityStore ?? new JsonVisibilityObservationStore();
+  const analyticsStore = overrides.analyticsStore ?? createDefaultAnalyticsStore();
   const app = express();
 
   app.disable("x-powered-by");
+  app.use("/api/imports", express.json({ limit: "3mb" }));
   app.use(express.json({ limit: "100kb" }));
 
   app.get("/health", (_request: Request, response: Response) => {
@@ -95,7 +118,9 @@ export function createApp(overrides: Partial<AppDependencies> = {}): Express {
     if (!validation.success) {
       throw validationError(validation.error.flatten());
     }
-    response.status(200).json(await compareAndSave(validation.data));
+    const run = await compareAndSave(validation.data);
+    await analyticsStore.registerProject({ projectId: `run:${run.id}`, createdAt: run.createdAt, targetUrl: run.targetUrl, status: "comparison-run" });
+    response.status(200).json(run);
   }));
 
   app.post("/api/projects/crawl", asyncHandler(async (request, response) => {
@@ -103,7 +128,145 @@ export function createApp(overrides: Partial<AppDependencies> = {}): Express {
     if (!validation.success) throw validationError(validation.error.flatten());
     const project = await crawl(validation.data);
     await runStore.saveCrawlProject?.(project);
+    if (isProjectReference(project)) await analyticsStore.registerProject(project);
     response.status(200).json(project);
+  }));
+
+  app.get("/api/connectors", (_request, response) => {
+    response.status(200).json({ release: 1, liveProviderAccess: false, connectors: connectorDefinitions });
+  });
+
+  app.get("/api/growth/projects", asyncHandler(async (_request, response) => {
+    response.status(200).json(await analyticsStore.listProjects());
+  }));
+
+  app.post("/api/imports/preview", asyncHandler(async (request, response) => {
+    const validation = csvPreviewRequestSchema.safeParse(request.body);
+    if (!validation.success) throw validationError(validation.error.flatten());
+    response.status(200).json(previewCsv(validation.data.file, validation.data.connectorId));
+  }));
+
+  app.post("/api/imports", asyncHandler(async (request, response) => {
+    const validation = csvImportRequestSchema.safeParse(request.body);
+    if (!validation.success) throw validationError(validation.error.flatten());
+    response.status(201).json(await importAnalyticsCsv(validation.data, analyticsStore));
+  }));
+
+  app.get("/api/imports", asyncHandler(async (request, response) => {
+    const validation = projectQuerySchema.safeParse({ projectId: request.query.projectId });
+    if (!validation.success) throw validationError(validation.error.flatten());
+    response.status(200).json(await analyticsStore.listImports(validation.data.projectId));
+  }));
+
+  app.get("/api/imports/:id", asyncHandler(async (request, response) => {
+    const params = analyticsIdParamsSchema.safeParse({ id: request.params.id });
+    const query = projectQuerySchema.safeParse({ projectId: request.query.projectId });
+    if (!params.success || !query.success) throw validationError({ params: params.success ? {} : params.error.flatten(), query: query.success ? {} : query.error.flatten() });
+    const item = await analyticsStore.getImport(query.data.projectId, params.data.id);
+    if (!item) throw new ApiError(404, "IMPORT_NOT_FOUND", "Analytics import was not found");
+    response.status(200).json(item);
+  }));
+
+  app.delete("/api/imports/:id", asyncHandler(async (request, response) => {
+    const params = analyticsIdParamsSchema.safeParse({ id: request.params.id });
+    const query = projectQuerySchema.safeParse({ projectId: request.query.projectId });
+    if (!params.success || !query.success) throw validationError({ params: params.success ? {} : params.error.flatten(), query: query.success ? {} : query.error.flatten() });
+    const item = await analyticsStore.getImport(query.data.projectId, params.data.id);
+    if (!item) throw new ApiError(404, "IMPORT_NOT_FOUND", "Analytics import was not found");
+    const ownedMetrics = (await analyticsStore.listMetrics(query.data.projectId)).filter((metric) => metric.importId === params.data.id);
+    const event = {
+      eventId: `audit:${randomUUID()}`,
+      projectId: query.data.projectId,
+      occurredAt: new Date().toISOString(),
+      eventType: "import.deleted" as const,
+      importRef: params.data.id,
+      summary: { deletedMetricCount: ownedMetrics.length, deletedRejectionCount: item.rejections.length, retainedOpportunities: true }
+    };
+    await analyticsStore.deleteImport(query.data.projectId, params.data.id, event);
+    response.status(200).json({ deleted: true, importId: params.data.id, deletedMetricCount: ownedMetrics.length, deletedRejectionCount: item.rejections.length, opportunitiesRetained: true });
+  }));
+
+  app.get("/api/data-sources", asyncHandler(async (request, response) => {
+    const validation = projectQuerySchema.safeParse({ projectId: request.query.projectId });
+    if (!validation.success) throw validationError(validation.error.flatten());
+    response.status(200).json(await analyticsStore.listSources(validation.data.projectId));
+  }));
+
+  app.get("/api/metrics", asyncHandler(async (request, response) => {
+    const validation = metricQuerySchema.safeParse(queryObject(request));
+    if (!validation.success) throw validationError(validation.error.flatten());
+    response.status(200).json(await analyticsStore.listMetrics(validation.data.projectId, validation.data));
+  }));
+
+  app.get("/api/search-performance", asyncHandler(async (request, response) => {
+    const validation = metricQuerySchema.safeParse({ ...queryObject(request), metricType: "search-performance" });
+    if (!validation.success) throw validationError(validation.error.flatten());
+    response.status(200).json(await analyticsStore.listMetrics(validation.data.projectId, validation.data));
+  }));
+
+  app.get("/api/search-performance/:id", asyncHandler(async (request, response) => {
+    const params = analyticsIdParamsSchema.safeParse({ id: request.params.id });
+    const query = projectQuerySchema.safeParse({ projectId: request.query.projectId });
+    if (!params.success || !query.success) throw validationError({ params: params.success ? {} : params.error.flatten(), query: query.success ? {} : query.error.flatten() });
+    const metric = await analyticsStore.getMetric(query.data.projectId, params.data.id);
+    if (!metric || metric.metricType !== "search-performance") throw new ApiError(404, "SEARCH_RECORD_NOT_FOUND", "Search performance record was not found");
+    const project = await analyticsStore.getProject(query.data.projectId);
+    const run = project ? await runStore.findLatestByTarget(project.targetUrl) : null;
+    response.status(200).json(buildSearchPerformanceDetail(metric as SearchPerformanceRecord, await analyticsStore.listOpportunities(query.data.projectId), run));
+  }));
+
+  app.get("/api/opportunities", asyncHandler(async (request, response) => {
+    const validation = projectQuerySchema.safeParse({ projectId: request.query.projectId });
+    if (!validation.success) throw validationError(validation.error.flatten());
+    response.status(200).json(await analyticsStore.listOpportunities(validation.data.projectId));
+  }));
+
+  app.get("/api/opportunities/:id", asyncHandler(async (request, response) => {
+    const params = analyticsIdParamsSchema.safeParse({ id: request.params.id });
+    const query = projectQuerySchema.safeParse({ projectId: request.query.projectId });
+    if (!params.success || !query.success) throw validationError({ params: params.success ? {} : params.error.flatten(), query: query.success ? {} : query.error.flatten() });
+    const opportunity = await analyticsStore.getOpportunity(query.data.projectId, params.data.id);
+    if (!opportunity) throw new ApiError(404, "OPPORTUNITY_NOT_FOUND", "Growth opportunity was not found");
+    response.status(200).json({ opportunity, evidence: await analyticsStore.listEvidence(query.data.projectId, opportunity.opportunityId) });
+  }));
+
+  app.patch("/api/opportunities/:id/status", asyncHandler(async (request, response) => {
+    const params = analyticsIdParamsSchema.safeParse({ id: request.params.id });
+    const query = projectQuerySchema.safeParse({ projectId: request.query.projectId });
+    const body = opportunityStatusRequestSchema.safeParse(request.body);
+    if (!params.success || !query.success || !body.success) throw validationError({ params: params.success ? {} : params.error.flatten(), query: query.success ? {} : query.error.flatten(), body: body.success ? {} : body.error.flatten() });
+    const current = await analyticsStore.getOpportunity(query.data.projectId, params.data.id);
+    if (!current) throw new ApiError(404, "OPPORTUNITY_NOT_FOUND", "Growth opportunity was not found");
+    const updated = await analyticsStore.updateOpportunityStatus(query.data.projectId, params.data.id, body.data.status, {
+      eventId: `audit:${randomUUID()}`,
+      projectId: query.data.projectId,
+      occurredAt: new Date().toISOString(),
+      eventType: "opportunity.status-changed",
+      importRef: null,
+      summary: { opportunityId: params.data.id, previousStatus: current.status, status: body.data.status }
+    });
+    response.status(200).json(updated);
+  }));
+
+  app.get("/api/growth/export", asyncHandler(async (request, response) => {
+    const validation = analyticsExportQuerySchema.safeParse({ projectId: request.query.projectId, format: request.query.format });
+    if (!validation.success) throw validationError(validation.error.flatten());
+    const project = await analyticsStore.getProject(validation.data.projectId);
+    if (!project) throw new ApiError(404, "PROJECT_NOT_FOUND", "Research project was not found");
+    const report = buildGrowthAnalyticsReport({
+      generatedAt: new Date().toISOString(),
+      project,
+      sources: await analyticsStore.listSources(project.projectId),
+      imports: await analyticsStore.listImports(project.projectId),
+      metrics: await analyticsStore.listMetrics(project.projectId),
+      opportunities: await analyticsStore.listOpportunities(project.projectId),
+      auditEvents: await analyticsStore.listAuditEvents(project.projectId)
+    });
+    const extension = validation.data.format === "markdown" ? "md" : validation.data.format;
+    response.setHeader("Content-Disposition", `attachment; filename="growth-intelligence-${project.projectId}.${extension}"`);
+    if (validation.data.format === "json") response.type("application/json").send(growthReportJson(report));
+    else if (validation.data.format === "markdown") response.type("text/markdown").send(growthReportMarkdown(report));
+    else response.type("text/csv").send(growthReportCsv(report));
   }));
 
   app.get("/api/research-sources", (_request, response) => {
@@ -234,6 +397,18 @@ function createDefaultRunStore(): RunStore {
   throw new Error(`STORAGE_ADAPTER must be json or sqlite; received ${adapter}`);
 }
 
+function createDefaultAnalyticsStore(): AnalyticsStore {
+  const adapter = process.env.STORAGE_ADAPTER?.trim().toLocaleLowerCase("en-US") || "json";
+  if (adapter === "json") {
+    const testPath = process.env.NODE_ENV === "test"
+      ? resolve(tmpdir(), `ai-visibility-lab-analytics-${process.pid}-${randomUUID()}.json`)
+      : undefined;
+    return new JsonAnalyticsStore(testPath);
+  }
+  if (adapter === "sqlite") return new SqliteAnalyticsStore(process.env.SQLITE_PATH?.trim() || undefined);
+  throw new Error(`STORAGE_ADAPTER must be json or sqlite; received ${adapter}`);
+}
+
 function asyncHandler(
   handler: (request: Request, response: Response) => Promise<void>
 ): (request: Request, response: Response, next: NextFunction) => void {
@@ -261,6 +436,14 @@ function mapError(error: unknown, request?: Pick<Request, "method" | "path">): A
         : "Run history is unavailable",
       { code: error.code, ...error.details }
     );
+  }
+  if (error instanceof CsvImportError) {
+    const status = error.code === "CSV_TOO_LARGE" ? 413 : 400;
+    return new ApiError(status, error.code, error.message, error.details);
+  }
+  if (error instanceof AnalyticsStoreError) {
+    const status = error.code === "PROJECT_NOT_FOUND" ? 404 : error.code === "DUPLICATE_RECORD" ? 409 : error.code === "INVALID_ANALYTICS_RECORD" ? 400 : 500;
+    return new ApiError(status, error.code, error.message, error.details);
   }
   if (error instanceof AiInterpretationError) {
     const status = error.code === "AI_NOT_CONFIGURED" ? 503
@@ -297,4 +480,24 @@ function isJsonSyntaxError(error: unknown): boolean {
 
 function isHttpStatusError(error: unknown, status: number): boolean {
   return error instanceof Error && "status" in error && (error as Error & { status?: number }).status === status;
+}
+
+function isProjectReference(value: CrawlResearchProject): value is CrawlResearchProject & ProjectReference {
+  return typeof value.projectId === "string"
+    && typeof value.createdAt === "string"
+    && typeof value.targetUrl === "string"
+    && typeof value.status === "string";
+}
+
+function queryObject(request: Request): Record<string, unknown> {
+  return {
+    projectId: request.query.projectId,
+    metricType: request.query.metricType,
+    page: request.query.page,
+    query: request.query.query,
+    dateFrom: request.query.dateFrom,
+    dateTo: request.query.dateTo,
+    device: request.query.device,
+    country: request.query.country
+  };
 }
