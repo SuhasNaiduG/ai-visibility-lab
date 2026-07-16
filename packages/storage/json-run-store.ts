@@ -205,16 +205,35 @@ const comparisonDeltaSchema = z.strictObject({
   ])
 });
 
+const comparisonFindingCategorySchema = z.enum([
+  "technical",
+  "content",
+  "entity",
+  "trust",
+  "schema",
+  "answerability",
+  "retrieval-support"
+]);
+
+const comparisonConfidenceSchema = z.enum(["high", "medium", "low"]);
+
 const comparisonGapSchema = z.looseObject({
+  ruleId: z.string().min(1),
+  category: comparisonFindingCategorySchema,
   gapId: z.string().min(1),
   metric: z.string().min(1),
   targetEvidence: z.array(evidenceSchema).min(1),
   competitorEvidence: z.array(competitorEvidenceSchema).min(1),
   whatDiffers: z.string().min(1),
+  exactDifference: z.string().min(1),
   competitorObservation: z.string().min(1),
+  interpretation: z.string().min(1),
   whyItMayMatter: z.string().min(1),
   implementationDirection: z.string().min(1),
   verificationMethod: z.string().min(1),
+  expectedObservableOutcome: z.string().min(1),
+  confidence: comparisonConfidenceSchema,
+  limitation: z.string().min(1),
   priority: z.enum(["high", "medium", "low"]),
   effort: z.enum(["low", "medium", "high"]),
   caution: z.string().min(1),
@@ -223,6 +242,13 @@ const comparisonGapSchema = z.looseObject({
 });
 
 const legacyComparisonGapSchema = comparisonGapSchema.extend({
+  ruleId: z.string().min(1).optional(),
+  category: comparisonFindingCategorySchema.optional(),
+  exactDifference: z.string().min(1).optional(),
+  interpretation: z.string().min(1).optional(),
+  expectedObservableOutcome: z.string().min(1).optional(),
+  confidence: comparisonConfidenceSchema.optional(),
+  limitation: z.string().min(1).optional(),
   targetEvidence: z.array(evidenceSchema),
   competitorEvidence: z.array(legacyCompetitorEvidenceSchema)
 });
@@ -256,16 +282,38 @@ const legacyComparisonRowSchema = comparisonRowSchema.extend({
 });
 
 const targetAdvantageSchema = z.looseObject({
+  ruleId: z.string().min(1),
+  category: comparisonFindingCategorySchema,
   advantageId: z.string().min(1),
   metric: z.string().min(1),
   targetEvidence: z.array(evidenceSchema).min(1),
   competitorEvidence: z.array(competitorEvidenceSchema).min(1),
   whatDiffers: z.string().min(1),
+  exactDifference: z.string().min(1),
   interpretation: z.string().min(1),
+  whyItMayMatter: z.string().min(1),
+  implementationDirection: z.string().min(1),
+  expectedObservableOutcome: z.string().min(1),
+  verificationMethod: z.string().min(1),
+  confidence: comparisonConfidenceSchema,
+  limitation: z.string().min(1),
+  priority: z.enum(["high", "medium", "low"]),
+  effort: z.enum(["low", "medium", "high"]),
   delta: comparisonDeltaSchema.optional()
 });
 
 const legacyTargetAdvantageSchema = targetAdvantageSchema.extend({
+  ruleId: z.string().min(1).optional(),
+  category: comparisonFindingCategorySchema.optional(),
+  exactDifference: z.string().min(1).optional(),
+  whyItMayMatter: z.string().min(1).optional(),
+  implementationDirection: z.string().min(1).optional(),
+  expectedObservableOutcome: z.string().min(1).optional(),
+  verificationMethod: z.string().min(1).optional(),
+  confidence: comparisonConfidenceSchema.optional(),
+  limitation: z.string().min(1).optional(),
+  priority: z.enum(["high", "medium", "low"]).optional(),
+  effort: z.enum(["low", "medium", "high"]).optional(),
   targetEvidence: z.array(evidenceSchema),
   competitorEvidence: z.array(legacyCompetitorEvidenceSchema)
 });
@@ -282,6 +330,8 @@ const comparisonSchema = z.looseObject({
   matrix: z.array(comparisonRowSchema).min(2).max(6),
   targetGaps: z.array(comparisonGapSchema),
   targetAdvantages: z.array(targetAdvantageSchema),
+  competitorAdvantages: z.array(comparisonGapSchema),
+  sharedGaps: z.array(comparisonGapSchema),
   competitorOnlySchemaTypes: z.array(z.string()),
   competitorOnlyTopics: z.array(z.string()),
   competitorOnlyQuestions: z.array(z.string()),
@@ -295,7 +345,9 @@ const legacyComparisonSchema = comparisonSchema.extend({
   excludedCompetitorUrls: z.array(httpUrlSchema).optional(),
   matrix: z.array(legacyComparisonRowSchema).min(2).max(6),
   targetGaps: z.array(legacyComparisonGapSchema),
-  targetAdvantages: z.array(legacyTargetAdvantageSchema)
+  targetAdvantages: z.array(legacyTargetAdvantageSchema),
+  competitorAdvantages: z.array(legacyComparisonGapSchema).optional(),
+  sharedGaps: z.array(legacyComparisonGapSchema).optional()
 });
 
 const observedChangeSchema = z.looseObject({
@@ -711,6 +763,8 @@ function missesCurrentComparisonContract(run: LegacyRunRecord): boolean {
     || !hasOwn(comparison, "conclusionStatus")
     || !hasOwn(comparison, "incompleteMessage")
     || !hasOwn(comparison, "excludedCompetitorUrls")
+    || !hasOwn(comparison, "competitorAdvantages")
+    || !hasOwn(comparison, "sharedGaps")
     || !comparison.sites
   ) return true;
   if (comparison.sites.some((site) => !hasOwn(site, "eligibility"))) return true;
@@ -719,13 +773,26 @@ function missesCurrentComparisonContract(run: LegacyRunRecord): boolean {
     || !hasOwn(row, "inputUrl")
     || !hasOwn(row, "eligibility")
   ))) return true;
-  return [...comparison.targetGaps, ...comparison.targetAdvantages].some((conclusion) => (
+  return [
+    ...comparison.targetGaps,
+    ...comparison.targetAdvantages,
+    ...(comparison.competitorAdvantages ?? []),
+    ...(comparison.sharedGaps ?? [])
+  ].some((conclusion) => (
+    !hasOwn(conclusion, "ruleId")
+    || !hasOwn(conclusion, "category")
+    || !hasOwn(conclusion, "exactDifference")
+    || !hasOwn(conclusion, "expectedObservableOutcome")
+    || !hasOwn(conclusion, "confidence")
+    || !hasOwn(conclusion, "limitation")
+    || (
     conclusion.competitorEvidence.some((bundle) => (
       !hasOwn(bundle, "normalizedUrl")
       || !hasOwn(bundle, "inputOrder")
       || !hasOwn(bundle, "observedValue")
       || !hasOwn(bundle, "benchmark")
     ))
+    )
   ));
 }
 
@@ -853,6 +920,8 @@ function recordAlignmentIssues(run: RunRecord, previousRun?: RunRecord, requireP
   if (run.comparison.conclusionStatus === "unavailable" && (
     run.comparison.targetGaps.length > 0
     || run.comparison.targetAdvantages.length > 0
+    || run.comparison.competitorAdvantages.length > 0
+    || run.comparison.sharedGaps.length > 0
     || run.comparison.competitorOnlySchemaTypes.length > 0
     || run.comparison.competitorOnlyTopics.length > 0
     || run.comparison.competitorOnlyQuestions.length > 0
@@ -865,6 +934,12 @@ function recordAlignmentIssues(run: RunRecord, previousRun?: RunRecord, requireP
     }
     for (const advantage of run.comparison.targetAdvantages) {
       issues.push(...comparisonEvidenceIssues(advantage, targetSite, usableCompetitors, `advantage ${advantage.advantageId}`));
+    }
+    for (const advantage of run.comparison.competitorAdvantages) {
+      issues.push(...comparisonEvidenceIssues(advantage, targetSite, usableCompetitors, `competitor advantage ${advantage.gapId}`));
+    }
+    for (const gap of run.comparison.sharedGaps) {
+      issues.push(...comparisonEvidenceIssues(gap, targetSite, usableCompetitors, `shared gap ${gap.gapId}`));
     }
   }
   issues.push(...comparisonSemanticIssues(run));
@@ -1071,6 +1146,14 @@ function comparisonSemanticIssues(run: RunRecord): string[] {
     run.comparison.targetAdvantages.map((advantage) => advantage.advantageId),
     expected.targetAdvantages.map((advantage) => advantage.advantageId)
   )) issues.push("stored target advantages do not match deterministic comparison rules");
+  if (!equalJson(
+    run.comparison.competitorAdvantages.map((advantage) => advantage.gapId),
+    expected.competitorAdvantages.map((advantage) => advantage.gapId)
+  )) issues.push("stored competitor advantages do not match deterministic comparison rules");
+  if (!equalJson(
+    run.comparison.sharedGaps.map((gap) => gap.gapId),
+    expected.sharedGaps.map((gap) => gap.gapId)
+  )) issues.push("stored shared gaps do not match deterministic comparison rules");
 
   const expectedGaps = new Map(expected.targetGaps.map((gap) => [gap.gapId, gap]));
   for (const gap of run.comparison.targetGaps) {
@@ -1081,6 +1164,16 @@ function comparisonSemanticIssues(run: RunRecord): string[] {
   for (const advantage of run.comparison.targetAdvantages) {
     const expectedAdvantage = expectedAdvantages.get(advantage.advantageId);
     if (expectedAdvantage) issues.push(...conclusionSemanticIssues(advantage, expectedAdvantage, `advantage ${advantage.advantageId}`));
+  }
+  const expectedCompetitorAdvantages = new Map(expected.competitorAdvantages.map((gap) => [gap.gapId, gap]));
+  for (const advantage of run.comparison.competitorAdvantages) {
+    const expectedAdvantage = expectedCompetitorAdvantages.get(advantage.gapId);
+    if (expectedAdvantage) issues.push(...conclusionSemanticIssues(advantage, expectedAdvantage, `competitor advantage ${advantage.gapId}`));
+  }
+  const expectedSharedGaps = new Map(expected.sharedGaps.map((gap) => [gap.gapId, gap]));
+  for (const gap of run.comparison.sharedGaps) {
+    const expectedGap = expectedSharedGaps.get(gap.gapId);
+    if (expectedGap) issues.push(...conclusionSemanticIssues(gap, expectedGap, `shared gap ${gap.gapId}`));
   }
   if (!equalJson(run.comparison.competitorOnlySchemaTypes, expected.competitorOnlySchemaTypes)) issues.push("competitor-only schema conclusions do not match analyzed evidence");
   if (!equalJson(run.comparison.competitorOnlyTopics, expected.competitorOnlyTopics)) issues.push("competitor-only topic conclusions do not match analyzed evidence");
@@ -1094,6 +1187,12 @@ function conclusionSemanticIssues(
   label: string
 ): string[] {
   const issues: string[] = [];
+  if (actual.ruleId !== expected.ruleId) issues.push(`${label} rule ID does not match its deterministic rule`);
+  if (actual.category !== expected.category) issues.push(`${label} category does not match its deterministic rule`);
+  if (actual.exactDifference !== expected.exactDifference) issues.push(`${label} exact difference does not match its deterministic rule`);
+  if (actual.expectedObservableOutcome !== expected.expectedObservableOutcome) issues.push(`${label} expected outcome does not match its deterministic rule`);
+  if (actual.confidence !== expected.confidence) issues.push(`${label} confidence does not match its deterministic rule`);
+  if (actual.limitation !== expected.limitation) issues.push(`${label} limitation does not match its deterministic rule`);
   if (actual.metric !== expected.metric) issues.push(`${label} metric does not match its deterministic rule`);
   if (!equalJson(actual.delta, expected.delta)) issues.push(`${label} delta does not match target and benchmark values`);
   if (!equalJson(

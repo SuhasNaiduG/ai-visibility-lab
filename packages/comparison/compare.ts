@@ -5,6 +5,8 @@ import {
 } from "./eligibility.js";
 import type {
   ComparableAnalysis,
+  ComparisonConfidence,
+  ComparisonFindingCategory,
   ComparisonGap,
   ComparisonMetricKey,
   ComparisonMetrics,
@@ -17,6 +19,9 @@ import type {
   ComparisonSiteInput,
   TargetAdvantage
 } from "./types.js";
+
+type RawComparisonGap = Omit<ComparisonGap, "ruleId" | "category" | "exactDifference" | "interpretation" | "expectedObservableOutcome" | "confidence" | "limitation">;
+type RawTargetAdvantage = Omit<TargetAdvantage, "ruleId" | "category" | "exactDifference" | "whyItMayMatter" | "implementationDirection" | "expectedObservableOutcome" | "verificationMethod" | "confidence" | "limitation" | "priority" | "effort">;
 
 export const COMPARISON_LIMITATIONS = [
   "The comparison uses public page evidence only; it cannot see private analytics, conversions, or revenue.",
@@ -140,8 +145,8 @@ export function compareAnalyses(input: ComparisonInput): ComparisonResult {
       : anyDegraded || anyIneligible
       ? "partial"
       : "complete";
-  const gaps: ComparisonGap[] = [];
-  const advantages: TargetAdvantage[] = [];
+  const gaps: RawComparisonGap[] = [];
+  const advantages: RawTargetAdvantage[] = [];
 
   if (conclusionStatus !== "unavailable") {
     for (const rule of scalarRules) {
@@ -176,6 +181,12 @@ export function compareAnalyses(input: ComparisonInput): ComparisonResult {
     gaps.push(createSetGap("GAP_COMPETITOR_ONLY_QUESTIONS", "detectedQuestions", input.target, benchmarkCompetitors, benchmarkSites, competitorOnlyQuestions, "Use the observed questions as research prompts only. Add independently written questions and accurate direct answers where they fit user intent.", "Rerun and inspect detected question text and direct-answer evidence."));
   }
 
+  const targetGaps = uniqueById(gaps, "gapId").map(enrichGap);
+  const targetAdvantages = uniqueById(advantages, "advantageId").map(enrichAdvantage);
+  const sharedGaps = conclusionStatus === "unavailable"
+    ? []
+    : createSharedGaps(input.target, benchmarkCompetitors, benchmarkSites, targetRow, benchmarkRows);
+
   return {
     targetUrl: input.target.normalizedUrl,
     competitorUrls: input.competitors.map((item) => item.normalizedUrl),
@@ -186,8 +197,10 @@ export function compareAnalyses(input: ComparisonInput): ComparisonResult {
     queryLabel: input.queryLabel?.trim() || null,
     metricDefinitions: METRIC_DEFINITIONS,
     matrix: rows,
-    targetGaps: uniqueById(gaps, "gapId"),
-    targetAdvantages: uniqueById(advantages, "advantageId"),
+    targetGaps,
+    targetAdvantages,
+    competitorAdvantages: targetGaps.map((gap) => ({ ...gap })),
+    sharedGaps,
     competitorOnlySchemaTypes,
     competitorOnlyTopics,
     competitorOnlyQuestions,
@@ -288,7 +301,7 @@ function toRow(analysis: ComparableAnalysis, site: ComparisonSite, manualRankObs
   };
 }
 
-function evaluateScalar(rule: ScalarRule, target: ComparableAnalysis, competitors: ComparableAnalysis[], targetRow: ComparisonRow, competitorRows: ComparisonRow[], competitorSites: ComparisonSite[], gaps: ComparisonGap[], advantages: TargetAdvantage[]): void {
+function evaluateScalar(rule: ScalarRule, target: ComparableAnalysis, competitors: ComparableAnalysis[], targetRow: ComparisonRow, competitorRows: ComparisonRow[], competitorSites: ComparisonSite[], gaps: RawComparisonGap[], advantages: RawTargetAdvantage[]): void {
   const targetValue = targetRow.metrics[rule.key];
   const competitorValues = competitorRows.map((row) => row.metrics[rule.key]);
   if (typeof targetValue !== "number" || competitorValues.some((value) => typeof value !== "number")) return;
@@ -337,7 +350,7 @@ function evaluateScalar(rule: ScalarRule, target: ComparableAnalysis, competitor
   }
 }
 
-function evaluateBooleanDifference(gapId: string, advantageId: string, metric: ComparisonMetricKey, target: ComparableAnalysis, competitors: ComparableAnalysis[], competitorSites: ComparisonSite[], targetValue: boolean, competitorValues: boolean[], gaps: ComparisonGap[], advantages: TargetAdvantage[], implementation: string, verification: string, priority: ComparisonGap["priority"]): void {
+function evaluateBooleanDifference(gapId: string, advantageId: string, metric: ComparisonMetricKey, target: ComparableAnalysis, competitors: ComparableAnalysis[], competitorSites: ComparisonSite[], targetValue: boolean, competitorValues: boolean[], gaps: RawComparisonGap[], advantages: RawTargetAdvantage[], implementation: string, verification: string, priority: ComparisonGap["priority"]): void {
   if (!targetValue && competitorValues.some(Boolean)) gaps.push({
     gapId,
     metric,
@@ -378,7 +391,7 @@ function evaluateBooleanDifference(gapId: string, advantageId: string, metric: C
   }
 }
 
-function createSetGap(id: string, metric: string, target: ComparableAnalysis, competitors: ComparableAnalysis[], competitorSites: ComparisonSite[], missing: string[], implementation: string, verification: string): ComparisonGap {
+function createSetGap(id: string, metric: string, target: ComparableAnalysis, competitors: ComparableAnalysis[], competitorSites: ComparisonSite[], missing: string[], implementation: string, verification: string): RawComparisonGap {
   const targetValue = setMetricValue(target, metric);
   const competitorValues = competitors.map((item) => setMetricValue(item, metric));
   const normalizedMissing = new Set(missing.map(normalizePhrase));
@@ -403,6 +416,87 @@ function createSetGap(id: string, metric: string, target: ComparableAnalysis, co
     caution: "Add only original, accurate, visible content and matching structured evidence.",
     missingValues: [...missing]
   };
+}
+
+function enrichGap(gap: RawComparisonGap): ComparisonGap {
+  const confidence: ComparisonConfidence = gap.missingValues ? "medium" : "high";
+  return {
+    ...gap,
+    ruleId: gap.gapId,
+    category: categoryForMetric(gap.metric),
+    exactDifference: gap.whatDiffers,
+    interpretation: gap.competitorObservation,
+    expectedObservableOutcome: `On a repeat crawl, the ${gap.metric} evidence should reflect the reviewed implementation and the recorded difference should narrow only if the underlying page evidence changed.`,
+    confidence,
+    limitation: gap.caution
+  };
+}
+
+function enrichAdvantage(advantage: RawTargetAdvantage): TargetAdvantage {
+  const definition = METRIC_DEFINITIONS.find((item) => item.key === advantage.metric);
+  return {
+    ...advantage,
+    ruleId: advantage.advantageId,
+    category: categoryForMetric(advantage.metric),
+    exactDifference: advantage.whatDiffers,
+    whyItMayMatter: definition?.whyItMayHelp ?? "The observed difference may be worth preserving while the page changes.",
+    implementationDirection: "Preserve the accurate target evidence while making other changes; do not optimize solely to maintain a count.",
+    expectedObservableOutcome: `A repeat crawl should preserve the target's observed ${advantage.metric} evidence unless an intentional implementation change alters it.`,
+    verificationMethod: `Rerun the comparison and inspect the target and competitor ${advantage.metric} evidence.`,
+    confidence: "high",
+    limitation: "This is an observed target difference for one metric, not proof of ranking, retrieval, citation, quality, or causation.",
+    priority: "low",
+    effort: "low"
+  };
+}
+
+function createSharedGaps(
+  target: ComparableAnalysis,
+  competitors: ComparableAnalysis[],
+  competitorSites: ComparisonSite[],
+  targetRow: ComparisonRow,
+  competitorRows: ComparisonRow[]
+): ComparisonGap[] {
+  const rules: Array<{
+    id: string;
+    metric: "hasMetaDescription" | "hasIdentitySignals" | "hasTrustSignals" | "hasContactSignals";
+    implementation: string;
+  }> = [
+    { id: "SHARED_GAP_DESCRIPTION_MISSING", metric: "hasMetaDescription", implementation: "Draft an original factual page summary for each site that lacks one; review every claim before publication." },
+    { id: "SHARED_GAP_IDENTITY_SIGNALS", metric: "hasIdentitySignals", implementation: "Add truthful visible organization or responsible-author identity where appropriate; never invent names or roles." },
+    { id: "SHARED_GAP_TRUST_SIGNALS", metric: "hasTrustSignals", implementation: "Add only verifiable authorship, reviewer, or provider context relevant to the page." },
+    { id: "SHARED_GAP_CONTACT_SIGNALS", metric: "hasContactSignals", implementation: "Add real, current contact details where they serve the user and verify consistency across the site." }
+  ];
+
+  return rules.flatMap((rule) => {
+    const targetValue = targetRow.metrics[rule.metric];
+    const values = competitorRows.map((row) => row.metrics[rule.metric]);
+    if (targetValue !== false || !values.every((value) => value === false)) return [];
+    return [enrichGap({
+      gapId: rule.id,
+      metric: rule.metric,
+      targetEvidence: metricEvidence(target, rule.metric, false),
+      competitorEvidence: competitorEvidence(competitors, competitorSites, rule.metric, values, (value) => value === false),
+      whatDiffers: `The target and every eligible competitor have ${rule.metric}=false in this crawl.`,
+      competitorObservation: "This is a shared observed gap, so no compared site supplies a positive benchmark for the signal.",
+      whyItMayMatter: METRIC_DEFINITIONS.find((item) => item.key === rule.metric)?.whyItMayHelp ?? "The shared absence may warrant review.",
+      implementationDirection: rule.implementation,
+      verificationMethod: `Rerun the crawl and inspect ${rule.metric} evidence for every site; verify facts in the rendered page.`,
+      priority: rule.metric === "hasIdentitySignals" ? "high" : "medium",
+      effort: "medium",
+      caution: "A shared absence on the fetched pages does not prove the businesses lack this information elsewhere, and adding it does not guarantee visibility."
+    })];
+  });
+}
+
+function categoryForMetric(metric: string): ComparisonFindingCategory {
+  if (metric === "schemaTypes" || metric === "schemaTypeCount" || metric === "jsonLdParseErrorCount") return "schema";
+  if (["questionCount", "faqIndicatorCount", "directAnswerCount", "detectedQuestions"].includes(metric)) return "answerability";
+  if (["hasIdentitySignals", "hasContactSignals", "hasLocationSignals", "locationTermCount"].includes(metric)) return "entity";
+  if (metric === "hasTrustSignals") return "trust";
+  if (["wordCount", "topicTermCount", "serviceTermCount", "topicTerms"].includes(metric)) return "content";
+  if (["totalHeadingCount", "internalLinkCount", "uniqueInternalUrlCount", "uniqueExternalDomainCount"].includes(metric)) return "retrieval-support";
+  return "technical";
 }
 
 function metricEvidence(analysis: ComparableAnalysis, field: string, observedValue: unknown): Evidence[] {

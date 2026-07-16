@@ -340,13 +340,16 @@ function renderGaps(gaps = [], siteEntries = [], definitions = new Map()) {
     const metricLabel = definitions.get(gap.metric)?.label ?? gap.metric;
     const delta = renderGapDifference(gap);
     list.append(element("article", { className: `gap ${gap.priority ?? ""}` }, [
-      element("div", { className: "tags" }, [gap.gapId, metricLabel, `Priority: ${gap.priority}`, `Effort: ${gap.effort}`].filter(Boolean).map((tag) => element("span", { className: "tag", text: tag }))),
+      element("div", { className: "tags" }, [gap.ruleId ?? gap.gapId, gap.category, metricLabel, `Confidence: ${gap.confidence}`, `Priority: ${gap.priority}`, `Effort: ${gap.effort}`].filter(Boolean).map((tag) => element("span", { className: "tag", text: tag }))),
       element("h3", { text: metricLabel }),
       element("div", { className: "detail-grid gap-explanation" }, [
-        labelled("Difference", gap.whatDiffers),
-        labelled("Explanation", gap.whyItMayMatter),
+        labelled("Exact difference", gap.exactDifference ?? gap.whatDiffers),
+        labelled("Interpretation", gap.interpretation ?? gap.competitorObservation),
+        labelled("Why it may matter", gap.whyItMayMatter),
         labelled("Implementation", gap.implementationDirection),
+        labelled("Expected observable outcome", gap.expectedObservableOutcome),
         labelled("Verification", gap.verificationMethod),
+        labelled("Confidence", gap.confidence),
         labelled("Priority", gap.priority),
         labelled("Effort", gap.effort)
       ]),
@@ -354,7 +357,7 @@ function renderGaps(gaps = [], siteEntries = [], definitions = new Map()) {
       element("div", { className: "causation-limitation" }, [
         element("strong", { text: "Causation limitation" }),
         element("p", { text: gap.competitorObservation }),
-        element("p", { text: gap.caution })
+        element("p", { text: gap.limitation ?? gap.caution })
       ]),
       element("h4", { className: "evidence-heading", text: "Target and competitor evidence" }),
       renderGapEvidence(gap, siteEntries),
@@ -371,11 +374,16 @@ function renderAdvantages(advantages = [], siteEntries = [], definitions = new M
     const metricLabel = definitions.get(advantage.metric)?.label ?? advantage.metric;
     const delta = renderGapDifference(advantage);
     list.append(element("article", { className: "gap advantage" }, [
-      element("div", { className: "tags" }, [advantage.advantageId, metricLabel].filter(Boolean).map((tag) => element("span", { className: "tag", text: tag }))),
+      element("div", { className: "tags" }, [advantage.ruleId ?? advantage.advantageId, advantage.category, metricLabel, `Confidence: ${advantage.confidence}`].filter(Boolean).map((tag) => element("span", { className: "tag", text: tag }))),
       element("h3", { text: metricLabel }),
       element("div", { className: "detail-grid gap-explanation" }, [
-        labelled("Difference", advantage.whatDiffers),
-        labelled("Interpretation", advantage.interpretation)
+        labelled("Exact difference", advantage.exactDifference ?? advantage.whatDiffers),
+        labelled("Interpretation", advantage.interpretation),
+        labelled("Why it may matter", advantage.whyItMayMatter),
+        labelled("Implementation", advantage.implementationDirection),
+        labelled("Expected observable outcome", advantage.expectedObservableOutcome),
+        labelled("Verification", advantage.verificationMethod),
+        labelled("Limitation", advantage.limitation)
       ]),
       delta,
       element("h4", { className: "evidence-heading", text: "Target and competitor evidence" }),
@@ -597,7 +605,7 @@ function renderComparison(run, container) {
   const definitions = new Map((comparison.metricDefinitions ?? []).map((item) => [item.key, item]));
   container.append(metricCards([
     ["Saved run", run.id ?? run.runId], ["Created", formatTime(run.createdAt)], ["Sites", siteEntries.length],
-    ["Conclusion status", conclusionStatus], ["Target gaps", comparison.targetGaps?.length ?? 0], ["Target advantages", comparison.targetAdvantages?.length ?? 0], ["Prior matching run", run.history?.previousRunId ?? "None"]
+    ["Conclusion status", conclusionStatus], ["Target gaps", comparison.targetGaps?.length ?? 0], ["Target advantages", comparison.targetAdvantages?.length ?? 0], ["Shared gaps", comparison.sharedGaps?.length ?? 0], ["Prior matching run", run.history?.previousRunId ?? "None"]
   ]));
   if (comparison.incompleteMessage) {
     container.append(element("div", { className: "comparison-incomplete", text: comparison.incompleteMessage, attributes: { role: "status" } }));
@@ -618,6 +626,16 @@ function renderComparison(run, container) {
     conclusionsUnavailable
       ? disabledConclusion()
       : renderAdvantages(comparison.targetAdvantages, siteEntries, definitions),
+    conclusionsUnavailable ? { className: "conclusion-section is-disabled", attributes: { "aria-disabled": "true" } } : { className: "conclusion-section" }
+  ));
+  container.append(section(
+    "Observed competitor advantages",
+    conclusionsUnavailable ? disabledConclusion() : renderGaps(comparison.competitorAdvantages ?? comparison.targetGaps, siteEntries, definitions),
+    conclusionsUnavailable ? { className: "conclusion-section is-disabled", attributes: { "aria-disabled": "true" } } : { className: "conclusion-section" }
+  ));
+  container.append(section(
+    "Shared observed gaps",
+    conclusionsUnavailable ? disabledConclusion() : renderGaps(comparison.sharedGaps ?? [], siteEntries, definitions),
     conclusionsUnavailable ? { className: "conclusion-section is-disabled", attributes: { "aria-disabled": "true" } } : { className: "conclusion-section" }
   ));
   container.append(section(

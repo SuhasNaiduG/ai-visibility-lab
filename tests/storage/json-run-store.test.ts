@@ -216,6 +216,16 @@ describe("JsonRunStore", () => {
     fabricatedDelta.comparison.targetGaps[0]!.delta!.benchmarkValue = 9_999;
     await expect(store.save(fabricatedDelta)).rejects.toMatchObject({ code: "INVALID_RECORD" });
 
+    const fabricatedExplanation = structuredClone(input);
+    fabricatedExplanation.comparison.targetGaps[0]!.exactDifference = "Unsupported comparison claim";
+    await expect(store.save(fabricatedExplanation)).rejects.toMatchObject({ code: "INVALID_RECORD" });
+
+    const fabricatedSharedRule = structuredClone(input);
+    if (fabricatedSharedRule.comparison.sharedGaps[0]) {
+      fabricatedSharedRule.comparison.sharedGaps[0].confidence = "low";
+      await expect(store.save(fabricatedSharedRule)).rejects.toMatchObject({ code: "INVALID_RECORD" });
+    }
+
     const fabricatedMatrixValue = structuredClone(input);
     fabricatedMatrixValue.comparison.matrix[1]!.metrics.wordCount = 9_999;
     await expect(store.save(fabricatedMatrixValue)).rejects.toMatchObject({ code: "INVALID_RECORD" });

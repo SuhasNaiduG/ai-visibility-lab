@@ -73,6 +73,14 @@ describe("compareAnalyses", () => {
     expect(result.competitorOnlySchemaTypes).toEqual(["FAQPage"]);
     expect(result.targetGaps.length).toBeGreaterThan(0);
     for (const gap of result.targetGaps) {
+      expect(gap).toEqual(expect.objectContaining({
+        ruleId: gap.gapId,
+        category: expect.any(String),
+        exactDifference: gap.whatDiffers,
+        expectedObservableOutcome: expect.any(String),
+        confidence: expect.stringMatching(/^(high|medium|low)$/u),
+        limitation: expect.any(String)
+      }));
       expectStructuredEvidence(gap.targetEvidence, target.finalUrl);
       expect(gap.competitorEvidence.length).toBeGreaterThan(0);
       expect(gap.competitorEvidence.some((item) => item.benchmark === true)).toBe(true);
@@ -87,7 +95,43 @@ describe("compareAnalyses", () => {
         expectStructuredEvidence(competitorItem.evidence, competitorItem.sourceUrl);
       }
     }
+    expect(result.competitorAdvantages.map((gap) => gap.ruleId)).toEqual(result.targetGaps.map((gap) => gap.ruleId));
+    for (const advantage of result.targetAdvantages) {
+      expect(advantage).toEqual(expect.objectContaining({
+        ruleId: advantage.advantageId,
+        exactDifference: advantage.whatDiffers,
+        implementationDirection: expect.any(String),
+        expectedObservableOutcome: expect.any(String),
+        verificationMethod: expect.any(String),
+        confidence: "high",
+        limitation: expect.any(String)
+      }));
+    }
     expect(result.limitations.join(" ")).toMatch(/not proof|cannot see|does not measure/i);
+  });
+
+  it("reports shared gaps when neither the target nor eligible competitors provide the signal", () => {
+    const target = makeAnalysis("https://target.example/", {
+      metaDescription: null,
+      metaDescriptionLength: 0,
+      coverage: makeCoverage()
+    });
+    const competitors = [1, 2].map((index) => makeAnalysis(`https://competitor-${index}.example/`, {
+      metaDescription: null,
+      metaDescriptionLength: 0,
+      coverage: makeCoverage()
+    }));
+
+    const result = compareAnalyses({ target, competitors });
+    const shared = result.sharedGaps.find((gap) => gap.ruleId === "SHARED_GAP_DESCRIPTION_MISSING");
+    expect(shared).toEqual(expect.objectContaining({
+      category: "technical",
+      confidence: "high",
+      exactDifference: expect.stringContaining("every eligible competitor")
+    }));
+    expect(shared?.targetEvidence[0]?.observedValue).toBe(false);
+    expect(shared?.competitorEvidence).toHaveLength(2);
+    expect(shared?.competitorEvidence.every((bundle) => bundle.benchmark === true)).toBe(true);
   });
 
   it("accepts five competitors and rejects comparisons outside the one-to-five limit", () => {
@@ -232,6 +276,8 @@ describe("compareAnalyses", () => {
     expect(result.excludedCompetitorUrls).toEqual([]);
     expect(result.targetGaps).toEqual([]);
     expect(result.targetAdvantages).toEqual([]);
+    expect(result.competitorAdvantages).toEqual([]);
+    expect(result.sharedGaps).toEqual([]);
     expect(result.competitorOnlySchemaTypes).toEqual([]);
     expect(result.competitorOnlyTopics).toEqual([]);
     expect(result.competitorOnlyQuestions).toEqual([]);

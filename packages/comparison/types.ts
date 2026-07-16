@@ -226,7 +226,28 @@ export interface ComparisonDelta {
     | "target-present";
 }
 
-export interface ComparisonGap {
+export type ComparisonFindingCategory =
+  | "technical"
+  | "content"
+  | "entity"
+  | "trust"
+  | "schema"
+  | "answerability"
+  | "retrieval-support";
+
+export type ComparisonConfidence = "high" | "medium" | "low";
+
+export interface ComparisonFindingExplanation {
+  ruleId: string;
+  category: ComparisonFindingCategory;
+  exactDifference: string;
+  interpretation: string;
+  expectedObservableOutcome: string;
+  confidence: ComparisonConfidence;
+  limitation: string;
+}
+
+export interface ComparisonGap extends ComparisonFindingExplanation {
   gapId: string;
   metric: string;
   targetEvidence: Evidence[];
@@ -245,12 +266,23 @@ export interface ComparisonGap {
 }
 
 export interface TargetAdvantage {
+  ruleId: string;
+  category: ComparisonFindingCategory;
   advantageId: string;
   metric: string;
   targetEvidence: Evidence[];
   competitorEvidence: CompetitorEvidence[];
   whatDiffers: string;
+  exactDifference: string;
   interpretation: string;
+  whyItMayMatter: string;
+  implementationDirection: string;
+  expectedObservableOutcome: string;
+  verificationMethod: string;
+  confidence: ComparisonConfidence;
+  limitation: string;
+  priority: Priority;
+  effort: Effort;
   /** Present for scalar and boolean comparisons. */
   delta?: ComparisonDelta;
 }
@@ -267,6 +299,8 @@ export interface ComparisonResult {
   matrix: ComparisonRow[];
   targetGaps: ComparisonGap[];
   targetAdvantages: TargetAdvantage[];
+  competitorAdvantages: ComparisonGap[];
+  sharedGaps: ComparisonGap[];
   competitorOnlySchemaTypes: string[];
   competitorOnlyTopics: string[];
   competitorOnlyQuestions: string[];
