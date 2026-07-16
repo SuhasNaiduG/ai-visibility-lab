@@ -940,6 +940,262 @@ async function loadRunHistory() {
   }
 }
 
+let analyticsProjects = [];
+let analyticsConnectors = [];
+let pendingImport = null;
+
+async function loadAnalyticsProjects() {
+  const [projects, connectorRegistry] = await Promise.all([
+    api("/api/growth/projects"),
+    analyticsConnectors.length ? Promise.resolve({ connectors: analyticsConnectors }) : api("/api/connectors")
+  ]);
+  analyticsProjects = projects;
+  analyticsConnectors = connectorRegistry.connectors ?? [];
+  for (const select of $$(".analytics-project-select")) {
+    const selected = select.value;
+    clear(select);
+    select.append(element("option", { text: projects.length ? "Select a research project" : "Create a crawl or comparison project first", attributes: { value: "" } }));
+    for (const project of projects) select.append(element("option", { text: `${project.targetUrl} — ${project.projectId}`, attributes: { value: project.projectId } }));
+    if (projects.some((project) => project.projectId === selected)) select.value = selected;
+  }
+  return projects;
+}
+
+async function ensureAnalyticsProjects(error) {
+  try { await loadAnalyticsProjects(); return true; }
+  catch (caught) { showError(error, caught); return false; }
+}
+
+function queryFromForm(form) {
+  const values = Object.fromEntries(new FormData(form));
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(values)) if (typeof value === "string" && value.trim()) query.set(key, value.trim());
+  return query;
+}
+
+async function loadDataSources() {
+  const form = $("#data-sources-form");
+  const error = $("#data-sources-error");
+  const results = $("#data-sources-results");
+  hideError(error);
+  const projectId = new FormData(form).get("projectId");
+  if (!projectId) { clear(results); results.append(element("p", { className: "empty", text: "Select a research project to inspect its connector sources." })); return; }
+  setBusy(form, true, "Loading project-scoped sources…");
+  try {
+    const [sources, imports] = await Promise.all([
+      api(`/api/data-sources?projectId=${encodeURIComponent(projectId)}`),
+      api(`/api/imports?projectId=${encodeURIComponent(projectId)}`)
+    ]);
+    clear(results);
+    results.append(element("p", { className: "release-boundary", text: "Release 1 source mode: validated CSV only. Live OAuth and provider access remain disabled." }));
+    if (!sources.length) { results.append(element("p", { className: "empty", text: "No CSV source has been imported for this project." })); return; }
+    results.append(section("Registered sources", table(["Source", "Connector", "Kind", "Account label", "Property label", "Created", "Imports"], sources.map((source) => [source.label, `${source.connectorId} v${source.connectorVersion}`, source.kind, source.accountLabel, source.propertyLabel, formatTime(source.createdAt), imports.filter((job) => job.sourceId === source.sourceId).length]))));
+  } catch (caught) { clear(results); showError(error, caught); }
+  finally { setBusy(form, false); }
+}
+
+function renderImportPreview(preview) {
+  const container = $("#import-preview");
+  clear(container);
+  container.append(metricCards([["Rows", preview.totalRows], ["Columns", preview.headers.length], ["File SHA-256", preview.fileSha256], ["Connector", preview.connectorId]]));
+  container.append(section("Safe preview", table(preview.headers, preview.sampleRows.map((row) => preview.headers.map((header) => row[header])))));
+  if (preview.warnings.length) container.append(section("Mapping warnings", element("ul", { className: "plain-list" }, preview.warnings.map((warning) => element("li", { text: warning })))));
+  const connector = analyticsConnectors.find((item) => item.connectorId === preview.connectorId);
+  const fields = [...(connector?.requiredFields ?? []), ...(connector?.optionalFields ?? [])];
+  const mapping = $("#import-mapping");
+  clear(mapping);
+  for (const field of fields) {
+    const required = connector.requiredFields.includes(field);
+    const select = element("select", { attributes: { "data-field": field, "aria-label": `Map ${field}` } });
+    select.append(element("option", { text: required ? "Select required column" : "Not mapped", attributes: { value: "" } }));
+    for (const header of preview.headers) select.append(element("option", { text: header, attributes: { value: header } }));
+    select.value = preview.suggestedMapping[field] ?? "";
+    mapping.append(element("label", { className: "mapping-field" }, [document.createTextNode(`${field}${required ? " (required)" : ""}`), select]));
+  }
+  $("#commit-import").disabled = false;
+}
+
+async function previewImport(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const error = $("#import-error");
+  hideError(error);
+  clear($("#import-results"));
+  $("#commit-import").disabled = true;
+  pendingImport = null;
+  setBusy(form, true, "Reading and validating CSV structure…");
+  try {
+    const values = Object.fromEntries(new FormData(form));
+    const file = form.elements.file.files[0];
+    if (!file) throw new Error("Select a CSV file.");
+    const content = await file.text();
+    const filePayload = { fileName: file.name, mimeType: file.type || "text/csv", content };
+    const preview = await api("/api/imports/preview", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ connectorId: values.connectorId, file: filePayload }) });
+    pendingImport = { values, file: filePayload, preview };
+    renderImportPreview(preview);
+  } catch (caught) { clear($("#import-preview")); clear($("#import-mapping")); showError(error, caught); }
+  finally { setBusy(form, false); }
+}
+
+async function commitImport() {
+  const error = $("#import-error");
+  const results = $("#import-results");
+  hideError(error);
+  if (!pendingImport) { showError(error, new Error("Preview a CSV before importing.")); return; }
+  const button = $("#commit-import");
+  button.disabled = true;
+  button.textContent = "Validating and importing…";
+  try {
+    const mapping = {};
+    for (const select of $$("#import-mapping select")) if (select.value) mapping[select.dataset.field] = select.value;
+    const values = pendingImport.values;
+    const payload = {
+      projectId: values.projectId,
+      connectorId: values.connectorId,
+      sourceLabel: values.sourceLabel,
+      ...(values.accountLabel ? { accountLabel: values.accountLabel } : {}),
+      ...(values.propertyLabel ? { propertyLabel: values.propertyLabel } : {}),
+      file: pendingImport.file,
+      mapping
+    };
+    const imported = await api("/api/imports", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+    clear(results);
+    results.append(metricCards([["Accepted", imported.job.acceptedRows], ["Rejected", imported.job.rejectedRows], ["Duplicates", imported.job.duplicateRows], ["Opportunities", imported.opportunityCount], ["Status", imported.job.status]]));
+    if (imported.rejections.length) results.append(section("Rejected rows (values are not retained)", table(["Row", "Code", "Field", "Reason"], imported.rejections.map((item) => [item.rowNumber, item.code, item.field, item.message]))));
+    results.append(section("Stored lineage boundary", [labelled("Import ID", imported.job.importId), labelled("File fingerprint", imported.job.fileSha256), labelled("Source dates", `${valueOrDash(imported.job.sourceDateFrom)} to ${valueOrDash(imported.job.sourceDateTo)}`), element("p", { text: imported.job.limitations.join(" ") })]));
+    pendingImport = null;
+    clear($("#import-mapping"));
+    clear($("#import-preview"));
+    await loadImports(values.projectId);
+  } catch (caught) { showError(error, caught); button.disabled = false; }
+  finally { button.textContent = "Validate and import normalized rows"; }
+}
+
+async function loadImports(projectId) {
+  const results = $("#import-results");
+  if (!projectId) return;
+  try {
+    const imports = await api(`/api/imports?projectId=${encodeURIComponent(projectId)}`);
+    clear(results);
+    if (!imports.length) { results.append(element("p", { className: "empty", text: "No retained imports exist for this project." })); return; }
+    const cards = element("div", { className: "analytics-records" });
+    for (const job of imports) {
+      const remove = element("button", { className: "danger-button", text: "Delete imported records", attributes: { type: "button" } });
+      remove.addEventListener("click", async () => {
+        if (!window.confirm("Delete only the normalized records and rejections owned by this import? Opportunities and redacted audit history will remain.")) return;
+        try { await api(`/api/imports/${encodeURIComponent(job.importId)}?projectId=${encodeURIComponent(projectId)}`, { method: "DELETE" }); await loadImports(projectId); }
+        catch (caught) { showError($("#import-error"), caught); }
+      });
+      cards.append(element("article", { className: "analytics-record" }, [element("div", { className: "tags" }, [job.status, `${job.acceptedRows} accepted`, `${job.rejectedRows} rejected`].map((tag) => element("span", { className: "tag", text: tag }))), element("h3", { text: job.fileName }), labelled("Imported", formatTime(job.completedAt)), labelled("Source date range", `${valueOrDash(job.sourceDateFrom)} to ${valueOrDash(job.sourceDateTo)}`), labelled("Import ID", job.importId), remove]));
+    }
+    results.append(section("Import history and deletion controls", cards));
+  } catch (caught) { showError($("#import-error"), caught); }
+}
+
+function metricObservation(metric) {
+  if (metric.metricType === "search-performance") return `${metric.clicks} clicks / ${metric.impressions} impressions / ${(metric.ctr * 100).toFixed(2)}% CTR / position ${metric.averagePosition}`;
+  if (metric.metricType === "web-analytics") return `${metric.sessions} sessions / ${valueOrDash(metric.engagementRate === null ? null : `${(metric.engagementRate * 100).toFixed(2)}% engagement`)} / ${valueOrDash(metric.conversions)} conversions`;
+  if (metric.metricType === "campaign-performance") return `${metric.campaign}: spend ${metric.spend}, ${metric.clicks} clicks, ${metric.conversions} conversions`;
+  return `${metric.source}: ${metric.leads} leads, ${metric.qualifiedLeads} qualified`;
+}
+
+async function loadDataExplorer(event) {
+  event?.preventDefault();
+  const form = $("#data-explorer-form");
+  const error = $("#data-explorer-error");
+  const results = $("#data-explorer-results");
+  hideError(error); setBusy(form, true, "Loading normalized records…");
+  try {
+    const metrics = await api(`/api/metrics?${queryFromForm(form)}`);
+    clear(results);
+    if (!metrics.length) { results.append(element("p", { className: "empty", text: "No normalized records match the current filters." })); return; }
+    const records = element("div", { className: "analytics-records" });
+    for (const metric of metrics) records.append(element("article", { className: "analytics-record" }, [element("div", { className: "tags" }, [metric.metricType, metric.lineage.connectorId, metric.lineage.validationStatus].map((tag) => element("span", { className: "tag", text: tag }))), element("h3", { text: metricObservation(metric) }), labelled("Date or range", metric.dateTo ? `${metric.date} to ${metric.dateTo}` : metric.date), labelled("Page", metric.page), section("Data lineage", table(["Field", "Value"], [["Metric ID", metric.metricId], ["Source", metric.sourceId], ["Import", metric.importId], ["Source record SHA-256", metric.lineage.sourceRecordId], ["Normalized SHA-256", metric.lineage.normalizedRecordHash], ["Transformation", metric.lineage.transformationVersion], ["Confidence", metric.lineage.confidence], ["Limitation", metric.lineage.limitations.join(" ")]]), { className: "lineage" })]));
+    results.append(metricCards([["Matching records", metrics.length], ["Projects", new Set(metrics.map((item) => item.projectId)).size], ["Imports", new Set(metrics.map((item) => item.importId)).size]]), records);
+  } catch (caught) { clear(results); showError(error, caught); }
+  finally { setBusy(form, false); }
+}
+
+async function loadSearchPerformance(event) {
+  event?.preventDefault();
+  const form = $("#search-performance-form");
+  const error = $("#search-performance-error");
+  const results = $("#search-performance-results");
+  hideError(error); clear($("#search-detail-results")); setBusy(form, true, "Loading imported Search Console rows…");
+  try {
+    const query = queryFromForm(form);
+    const projectId = query.get("projectId");
+    const [records, sources] = await Promise.all([api(`/api/search-performance?${query}`), api(`/api/data-sources?projectId=${encodeURIComponent(projectId)}`)]);
+    const sourceNames = new Map(sources.map((source) => [source.sourceId, source.label]));
+    clear(results);
+    if (!records.length) { results.append(element("p", { className: "empty", text: "No imported Search Console rows match the current filters." })); return; }
+    const head = element("thead", {}, element("tr", {}, ["Query", "Page", "Date or date range", "Clicks", "Impressions", "CTR", "Average position", "Device", "Country", "Import source", "Details"].map((header) => element("th", { text: header }))));
+    const body = element("tbody");
+    for (const record of records) {
+      const open = element("button", { className: "row-open", text: "Open", attributes: { type: "button" } });
+      open.addEventListener("click", () => openSearchDetail(projectId, record.metricId));
+      body.append(element("tr", {}, [record.query, record.page, record.dateTo ? `${record.date} to ${record.dateTo}` : record.date, record.clicks, record.impressions, `${(record.ctr * 100).toFixed(2)}%`, record.averagePosition.toFixed(2), record.device, record.country, sourceNames.get(record.sourceId) ?? record.sourceId].map((value) => element("td", { text: value })).concat(element("td", {}, open))));
+    }
+    results.append(metricCards([["Rows", records.length], ["Clicks", records.reduce((sum, item) => sum + item.clicks, 0)], ["Impressions", records.reduce((sum, item) => sum + item.impressions, 0)]]), element("div", { className: "table-wrap search-performance-table" }, element("table", {}, [head, body])));
+  } catch (caught) { clear(results); showError(error, caught); }
+  finally { setBusy(form, false); }
+}
+
+async function openSearchDetail(projectId, metricId) {
+  const error = $("#search-performance-error");
+  const results = $("#search-detail-results");
+  hideError(error); clear(results); results.append(element("p", { className: "empty", text: "Linking imported values to saved public evidence…" }));
+  try {
+    const detail = await api(`/api/search-performance/${encodeURIComponent(metricId)}?projectId=${encodeURIComponent(projectId)}`);
+    clear(results);
+    const metrics = detail.metrics;
+    results.append(
+      section("1. Search Console metrics", table(["Query", "Page", "Date/range", "Clicks", "Impressions", "CTR", "Average position", "Device", "Country", "Import source"], [[metrics.query, metrics.page, metrics.dateTo ? `${metrics.date} to ${metrics.dateTo}` : metrics.date, metrics.clicks, metrics.impressions, `${(metrics.ctr * 100).toFixed(2)}%`, metrics.averagePosition.toFixed(2), metrics.device, metrics.country, metrics.sourceId]])),
+      section("2. Matching public website evidence", detail.matchingPublicWebsiteEvidence ? [labelled("Source URL", detail.matchingPublicWebsiteEvidence.sourceUrl), labelled("Observed", formatTime(detail.matchingPublicWebsiteEvidence.fetchedAt)), labelled("Title", detail.matchingPublicWebsiteEvidence.title), labelled("Description", detail.matchingPublicWebsiteEvidence.metaDescription), labelled("H1", detail.matchingPublicWebsiteEvidence.h1), jsonDetails(detail.matchingPublicWebsiteEvidence.relevantFindings, "Relevant deterministic findings")] : element("p", { className: "empty", text: "No matching saved public-page evidence. Nothing is inferred." })),
+      section("3. Related competitor evidence", detail.relatedCompetitorEvidence.length ? table(["Public competitor page", "Related topics", "Related questions", "Related gap IDs"], detail.relatedCompetitorEvidence.map((item) => [item.sourceUrl, item.topicTerms, item.questions, item.relevantGapIds])) : element("p", { className: "empty", text: "No related competitor evidence was observed in the latest saved comparison." })),
+      section("4. Deterministic opportunity", detail.deterministicOpportunity ? [element("h3", { text: detail.deterministicOpportunity.title }), labelled("Rule", `${detail.deterministicOpportunity.ruleId} v${detail.deterministicOpportunity.ruleVersion}`), labelled("Observation", detail.deterministicOpportunity.observation)] : element("p", { className: "empty", text: "No Release 1 opportunity rule triggered for this row." })),
+      section("5. Exact calculation", element("p", { text: detail.exactCalculation ?? "No calculation triggered." })),
+      section("6. Proposed action", element("p", { text: detail.proposedAction ?? "No action proposed." })),
+      section("7. Success metric", element("p", { text: detail.successMetric ?? "No success metric because no rule triggered." })),
+      section("8. Limitation", element("p", { className: "causation-limitation", text: detail.limitation }))
+    );
+    results.scrollIntoView({ behavior: "smooth", block: "start" });
+  } catch (caught) { clear(results); showError(error, caught); }
+}
+
+async function loadOpportunities(event) {
+  event?.preventDefault();
+  const form = $("#opportunities-form");
+  const error = $("#opportunities-error");
+  const results = $("#opportunities-results");
+  hideError(error); setBusy(form, true, "Loading deterministic backlog…");
+  try {
+    const values = Object.fromEntries(new FormData(form));
+    const all = await api(`/api/opportunities?projectId=${encodeURIComponent(values.projectId)}`);
+    const opportunities = values.status ? all.filter((item) => item.status === values.status) : all;
+    clear(results);
+    const exports = element("div", { className: "export-links" }, ["json", "markdown", "csv"].map((format) => element("a", { text: `Export ${format.toUpperCase()}`, attributes: { href: `/api/growth/export?projectId=${encodeURIComponent(values.projectId)}&format=${format}` } })));
+    results.append(exports);
+    if (!opportunities.length) { results.append(element("p", { className: "empty", text: "No opportunities match the selected workflow status." })); return; }
+    const list = element("div", { className: "opportunity-list" });
+    for (const item of opportunities) {
+      const select = element("select", { attributes: { "aria-label": `Workflow status for ${item.title}` } });
+      for (const status of ["new", "reviewed", "approved", "rejected", "implemented", "monitoring", "verified"]) select.append(element("option", { text: status, attributes: { value: status } }));
+      select.value = item.status;
+      const save = element("button", { className: "workflow-save", text: "Save status", attributes: { type: "button" } });
+      save.addEventListener("click", async () => {
+        save.disabled = true;
+        try { await api(`/api/opportunities/${encodeURIComponent(item.opportunityId)}/status?projectId=${encodeURIComponent(values.projectId)}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: select.value }) }); await loadOpportunities(); }
+        catch (caught) { showError(error, caught); }
+        finally { save.disabled = false; }
+      });
+      list.append(element("article", { className: `opportunity-card ${item.priority}` }, [element("div", { className: "opportunity-heading" }, [element("div", {}, [element("div", { className: "tags" }, [item.priority, item.category, item.ruleId, `v${item.ruleVersion}`].map((tag) => element("span", { className: "tag", text: tag }))), element("h3", { text: item.title })]), element("span", { className: "eligibility-badge eligible", text: item.status })]), labelled("Page", item.page), labelled("Query", item.query), labelled("Observation", item.observation), labelled("Exact calculation", item.exactCalculation), labelled("Proposed action", item.proposedAction), labelled("Success metric", item.successMetric), labelled("Limitation", item.limitation), element("div", { className: "workflow-controls" }, [element("label", {}, [document.createTextNode("Workflow status"), select]), save]) ]));
+    }
+    results.append(metricCards([["Matching opportunities", opportunities.length], ["High priority", opportunities.filter((item) => item.priority === "high").length], ["New", opportunities.filter((item) => item.status === "new").length]]), list);
+  } catch (caught) { clear(results); showError(error, caught); }
+  finally { setBusy(form, false); }
+}
+
 $$('.tab').forEach((button) => button.addEventListener("click", () => {
   $$('.tab').forEach((item) => {
     item.classList.toggle("active", item === button);
@@ -953,6 +1209,15 @@ $$('.tab').forEach((button) => button.addEventListener("click", () => {
   if (button.dataset.panel === "history-panel") loadRunHistory();
   if (button.dataset.panel === "sources-panel") loadResearchSources();
   if (button.dataset.panel === "visibility-panel") loadVisibilityObservations();
+  if (["data-sources-panel", "imports-panel", "data-explorer-panel", "search-performance-panel", "opportunities-panel"].includes(button.dataset.panel)) {
+    const error = button.dataset.panel === "data-sources-panel" ? $("#data-sources-error") : button.dataset.panel === "imports-panel" ? $("#import-error") : button.dataset.panel === "data-explorer-panel" ? $("#data-explorer-error") : button.dataset.panel === "search-performance-panel" ? $("#search-performance-error") : $("#opportunities-error");
+    hideError(error);
+    ensureAnalyticsProjects(error).then((ready) => {
+      if (!ready) return;
+      if (button.dataset.panel === "data-sources-panel" && $("#data-sources-form select").value) loadDataSources();
+      if (button.dataset.panel === "imports-panel" && $("#import-form select[name='projectId']").value) loadImports($("#import-form select[name='projectId']").value);
+    });
+  }
 }));
 
 $("#crawl-form").addEventListener("submit", async (event) => {
@@ -971,6 +1236,7 @@ $("#crawl-form").addEventListener("submit", async (event) => {
     };
     const project = await api("/api/projects/crawl", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
     renderCrawlProject(project, $("#crawl-results"));
+    await loadAnalyticsProjects();
   } catch (caught) { showError(error, caught); }
   finally { setBusy(form, false); }
 });
@@ -1008,6 +1274,7 @@ $("#compare-form").addEventListener("submit", async (event) => {
     const run = await api("/api/compare", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
     renderComparison(run, $("#compare-results"));
     await loadRunHistory();
+    await loadAnalyticsProjects();
   } catch (caught) { showError(error, caught); }
   finally { setBusy(form, false); }
 });
@@ -1042,6 +1309,12 @@ $("#visibility-form").addEventListener("submit", async (event) => {
 
 $("#refresh-history").addEventListener("click", loadRunHistory);
 $("#refresh-sources").addEventListener("click", loadResearchSources);
+$("#data-sources-form").addEventListener("submit", (event) => { event.preventDefault(); loadDataSources(); });
+$("#import-form").addEventListener("submit", previewImport);
+$("#commit-import").addEventListener("click", commitImport);
+$("#data-explorer-form").addEventListener("submit", loadDataExplorer);
+$("#search-performance-form").addEventListener("submit", loadSearchPerformance);
+$("#opportunities-form").addEventListener("submit", loadOpportunities);
 
 const observationDate = $("#visibility-form input[name='observationDate']");
 if (!observationDate.value) observationDate.value = new Date().toISOString().slice(0, 10);

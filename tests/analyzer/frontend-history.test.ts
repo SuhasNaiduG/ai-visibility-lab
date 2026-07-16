@@ -171,6 +171,25 @@ describe("demo implementation and verification UI", () => {
     expect(html).not.toContain("â†’");
     expect(`${source}\n${html}`).not.toMatch(/Ã|â€¦|â€”|Â/u);
   });
+
+  it("exposes the complete Release 1 analytics workspace and required Search Performance fields", async () => {
+    const source = await readFile(new URL("../../apps/web/public/app.js", import.meta.url), "utf8");
+    const html = await readFile(new URL("../../apps/web/public/index.html", import.meta.url), "utf8");
+
+    for (const panel of ["data-sources-panel", "imports-panel", "data-explorer-panel", "search-performance-panel", "opportunities-panel"]) {
+      expect(html).toContain(`id="${panel}"`);
+    }
+    for (const column of ["Query", "Page", "Date or date range", "Clicks", "Impressions", "CTR", "Average position", "Device", "Country", "Import source"]) {
+      expect(source).toContain(`"${column}"`);
+    }
+    for (const detail of ["1. Search Console metrics", "2. Matching public website evidence", "3. Related competitor evidence", "4. Deterministic opportunity", "5. Exact calculation", "6. Proposed action", "7. Success metric", "8. Limitation"]) {
+      expect(source).toContain(detail);
+    }
+    expect(html).toContain("No provider sign-in, credentials, OAuth tokens, or live synchronization is active.");
+    expect(source).toContain("file.text()");
+    expect(source).toContain("values are not retained");
+    expect(source).toContain("Opportunities and redacted audit history will remain.");
+  });
 });
 
 function findByClass(node: FakeNode, className: string): FakeNode | undefined {

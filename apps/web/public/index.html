@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>AI Visibility Engineering Lab</title>
     <meta name="description" content="Deterministic public-page evidence, comparison, and change verification." />
-    <link rel="stylesheet" href="/styles.css?v=20260716-research-platform" />
+    <link rel="stylesheet" href="/styles.css?v=20260717-growth-release-1" />
   </head>
   <body>
     <a class="skip-link" href="#workspace">Skip to research workspace</a>
@@ -25,6 +25,11 @@
         <button class="tab" type="button" role="tab" aria-selected="false" aria-controls="compare-panel" data-panel="compare-panel">Competitor comparison</button>
         <button class="tab" type="button" role="tab" aria-selected="false" aria-controls="history-panel" data-panel="history-panel">Run history</button>
         <button class="tab" type="button" role="tab" aria-selected="false" aria-controls="visibility-panel" data-panel="visibility-panel">Visibility observations</button>
+        <button class="tab" type="button" role="tab" aria-selected="false" aria-controls="data-sources-panel" data-panel="data-sources-panel">Data Sources</button>
+        <button class="tab" type="button" role="tab" aria-selected="false" aria-controls="imports-panel" data-panel="imports-panel">CSV Imports</button>
+        <button class="tab" type="button" role="tab" aria-selected="false" aria-controls="data-explorer-panel" data-panel="data-explorer-panel">Data Explorer</button>
+        <button class="tab" type="button" role="tab" aria-selected="false" aria-controls="search-performance-panel" data-panel="search-performance-panel">Search Performance</button>
+        <button class="tab" type="button" role="tab" aria-selected="false" aria-controls="opportunities-panel" data-panel="opportunities-panel">Opportunity Backlog</button>
         <button class="tab" type="button" role="tab" aria-selected="false" aria-controls="sources-panel" data-panel="sources-panel">Research sources</button>
         <button class="tab" type="button" role="tab" aria-selected="false" aria-controls="roadmap-panel" data-panel="roadmap-panel">Roadmap</button>
       </nav>
@@ -189,6 +194,81 @@
         <div id="visibility-results" class="results" aria-live="polite"></div>
       </section>
 
+      <section id="data-sources-panel" class="panel" role="tabpanel" aria-labelledby="data-sources-heading" hidden>
+        <div class="panel-heading">
+          <div>
+            <p class="step">Project → Source → Lineage</p>
+            <h2 id="data-sources-heading">Offline analytics data sources</h2>
+          </div>
+          <p>Release 1 accepts CSV exports only. No provider sign-in, credentials, OAuth tokens, or live synchronization is active.</p>
+        </div>
+        <form id="data-sources-form" class="form-grid analytics-filter-form">
+          <label class="wide">Research project<select name="projectId" class="analytics-project-select" required><option value="">Create a crawl or comparison project first</option></select></label>
+          <button type="submit">Load data sources</button><span class="progress" role="status" aria-live="polite"></span>
+        </form>
+        <div id="data-sources-error" class="error" role="alert" hidden></div>
+        <div id="data-sources-results" class="results" aria-live="polite"></div>
+      </section>
+
+      <section id="imports-panel" class="panel" role="tabpanel" aria-labelledby="imports-heading" hidden>
+        <div class="panel-heading">
+          <div>
+            <p class="step">Select CSV → Preview → Map → Validate → Import</p>
+            <h2 id="imports-heading">Validated CSV import wizard</h2>
+          </div>
+          <p>The browser sends the selected CSV for validation. The original file is discarded after processing; only normalized records, lineage, summaries, and redacted row rejections are retained.</p>
+        </div>
+        <form id="import-form" class="form-grid import-form">
+          <label>Research project<select name="projectId" class="analytics-project-select" required><option value="">Create a crawl or comparison project first</option></select></label>
+          <label>Connector<select name="connectorId" required><option value="search-console-csv">Search Console CSV</option><option value="web-analytics-csv">Web Analytics CSV</option><option value="campaign-csv">Campaign CSV</option><option value="lead-summary-csv">Lead Summary CSV</option></select></label>
+          <label>Source label<input name="sourceLabel" maxlength="200" value="CSV export" required /></label>
+          <label>Account label (optional)<input name="accountLabel" maxlength="200" /></label>
+          <label>Property label (optional)<input name="propertyLabel" maxlength="200" /></label>
+          <label>CSV file<input name="file" type="file" accept=".csv,text/csv" required /></label>
+          <button type="submit">Preview and map</button><span class="progress" role="status" aria-live="polite"></span>
+        </form>
+        <div id="import-error" class="error" role="alert" hidden></div>
+        <div id="import-preview" class="results" aria-live="polite"></div>
+        <div id="import-mapping" class="mapping-grid"></div>
+        <button id="commit-import" type="button" disabled>Validate and import normalized rows</button>
+        <div id="import-results" class="results" aria-live="polite"></div>
+      </section>
+
+      <section id="data-explorer-panel" class="panel" role="tabpanel" aria-labelledby="data-explorer-heading" hidden>
+        <div class="panel-heading"><div><p class="step">Filter → Inspect → Trace</p><h2 id="data-explorer-heading">Normalized analytics Data Explorer</h2></div><p>Every row remains project-scoped and exposes its connector, import, source-record hash, transformation version, and limitations.</p></div>
+        <form id="data-explorer-form" class="form-grid analytics-filter-form">
+          <label>Project<select name="projectId" class="analytics-project-select" required><option value="">Select a project</option></select></label>
+          <label>Metric type<select name="metricType"><option value="">All</option><option value="search-performance">Search performance</option><option value="web-analytics">Web analytics</option><option value="campaign-performance">Campaign performance</option><option value="lead-summary">Lead summary</option></select></label>
+          <label>Page contains<input name="page" maxlength="2000" /></label><label>Query contains<input name="query" maxlength="1000" /></label>
+          <label>Date from<input name="dateFrom" type="date" /></label><label>Date to<input name="dateTo" type="date" /></label>
+          <label>Device<input name="device" maxlength="200" /></label><label>Country<input name="country" maxlength="200" /></label>
+          <button type="submit">Apply filters</button><span class="progress" role="status" aria-live="polite"></span>
+        </form>
+        <div id="data-explorer-error" class="error" role="alert" hidden></div><div id="data-explorer-results" class="results" aria-live="polite"></div>
+      </section>
+
+      <section id="search-performance-panel" class="panel" role="tabpanel" aria-labelledby="search-performance-heading" hidden>
+        <div class="panel-heading"><div><p class="step">Imported demand → Public evidence → Deterministic action</p><h2 id="search-performance-heading">Search Performance</h2></div><p>Uses imported Search Console values only. Open a row to connect the reported query to matching public-page and competitor evidence from the latest saved run.</p></div>
+        <form id="search-performance-form" class="form-grid analytics-filter-form">
+          <label>Project<select name="projectId" class="analytics-project-select" required><option value="">Select a project</option></select></label>
+          <label>Page contains<input name="page" maxlength="2000" /></label><label>Query contains<input name="query" maxlength="1000" /></label>
+          <label>Date from<input name="dateFrom" type="date" /></label><label>Date to<input name="dateTo" type="date" /></label>
+          <label>Device<input name="device" maxlength="200" /></label><label>Country<input name="country" maxlength="200" /></label>
+          <button type="submit">Load Search Performance</button><span class="progress" role="status" aria-live="polite"></span>
+        </form>
+        <div id="search-performance-error" class="error" role="alert" hidden></div><div id="search-performance-results" class="results" aria-live="polite"></div><div id="search-detail-results" class="results detail-drawer" aria-live="polite"></div>
+      </section>
+
+      <section id="opportunities-panel" class="panel" role="tabpanel" aria-labelledby="opportunities-heading" hidden>
+        <div class="panel-heading"><div><p class="step">Observation → Exact calculation → Review workflow</p><h2 id="opportunities-heading">Deterministic opportunity backlog</h2></div><p>Priorities are transparent rule outputs. Review status is persisted independently; deleting an import never deletes an opportunity record.</p></div>
+        <form id="opportunities-form" class="form-grid analytics-filter-form">
+          <label>Project<select name="projectId" class="analytics-project-select" required><option value="">Select a project</option></select></label>
+          <label>Status<select name="status"><option value="">All</option><option>new</option><option>reviewed</option><option>approved</option><option>rejected</option><option>implemented</option><option>monitoring</option><option>verified</option></select></label>
+          <button type="submit">Load backlog</button><span class="progress" role="status" aria-live="polite"></span>
+        </form>
+        <div id="opportunities-error" class="error" role="alert" hidden></div><div id="opportunities-results" class="results" aria-live="polite"></div>
+      </section>
+
       <section id="sources-panel" class="panel" role="tabpanel" aria-labelledby="sources-heading" hidden>
         <div class="panel-heading">
           <div>
@@ -213,6 +293,6 @@
     <footer>
       <p><strong>Evidence boundary:</strong> public-page observations and transparent editorial heuristics only. No private analytics, backlink data, automatic rankings, configured AI provider by default, or causation claims.</p>
     </footer>
-    <script src="/app.js?v=20260716-research-platform" defer></script>
+    <script src="/app.js?v=20260717-growth-release-1" defer></script>
   </body>
 </html>
