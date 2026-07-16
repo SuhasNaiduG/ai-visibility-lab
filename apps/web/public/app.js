@@ -427,6 +427,30 @@ function renderFixtureVerification() {
   ]);
 }
 
+function renderRunVerification(report) {
+  return element("div", { className: "run-verification" }, [
+    element("p", { className: "causation-limitation", text: report.causationStatement }),
+    metricCards([
+      ["Verification version", report.verificationVersion],
+      ["Compared run", report.comparedRunId],
+      ["New rules", report.ruleChanges?.new?.length ?? 0],
+      ["Resolved rules", report.ruleChanges?.resolved?.length ?? 0],
+      ["Unchanged rules", report.ruleChanges?.unchanged?.length ?? 0],
+      ["Regressed rules", report.ruleChanges?.regressed?.length ?? 0],
+      ["Resolved proposals", report.siteSummary?.resolvedImplementationArtifacts ?? 0]
+    ]),
+    table(["Proposal", "Source rule", "Status", "Explanation"], (report.implementationLinks ?? []).map((link) => [link.artifactId, link.sourceRuleId, link.status, link.explanation])),
+    table(["Analyzer", "Previous version/status", "Current version/status", "Classification"], (report.analyzerChanges ?? []).map((change) => [
+      change.analyzerId,
+      `${valueOrDash(change.previousVersion)} / ${valueOrDash(change.previousStatus)}`,
+      `${valueOrDash(change.currentVersion)} / ${valueOrDash(change.currentStatus)}`,
+      change.classification
+    ])),
+    jsonDetails(report.evidenceDiffs ?? [], "Evidence diffs"),
+    element("ul", { className: "plain-list" }, (report.limitations ?? []).map((item) => element("li", { text: item })))
+  ]);
+}
+
 function analysisForSite(run, entry) {
   const analyses = run.analyses ?? [];
   const direct = analyses[entry.site.inputOrder];
@@ -641,6 +665,7 @@ function renderComparison(run, container) {
   ));
   container.append(section("Implementation workspace", renderImplementationWorkspace(comparison.implementationArtifacts ?? []), { className: "implementation-section" }));
   container.append(section("Fixture verification", renderFixtureVerification(), { className: "verification-section" }));
+  if (run.verification) container.append(section("Later-run verification", renderRunVerification(run.verification), { className: "verification-section" }));
   if (run.history) container.append(section("Changes since the prior matching run", [
     metricCards([["Technical", run.history.technicalChanges?.length ?? 0], ["Metadata", run.history.metadataChanges?.length ?? 0], ["Schema", run.history.schemaChanges?.length ?? 0], ["Headings", run.history.headingChanges?.length ?? 0], ["Content", run.history.contentCountChanges?.length ?? 0], ["Links/media", run.history.linkAndMediaChanges?.length ?? 0]]),
     element("p", { text: run.history.correlationSummary?.interpretation }),

@@ -14,6 +14,7 @@ import type {
   ComparisonSite
 } from "../comparison/types.js";
 import { PROPOSAL_REVIEW_LABEL } from "../proposals/types.js";
+import { verifyResearchRuns } from "../verification/verify.js";
 import {
   APPLICATION_VERSION,
   STORAGE_SCHEMA_VERSION,
@@ -81,6 +82,23 @@ const coverageSchema = z.looseObject({
   contentSection: coverageDimensionSchema
 });
 
+const analyzerObservationSchema = z.looseObject({
+  analyzerId: z.string().min(1),
+  analyzerVersion: z.string().min(1),
+  group: z.enum(["technical", "content-answerability", "entities", "trust-ymyl", "retrieval-support"]),
+  label: z.string().min(1),
+  status: z.enum(["observed", "partially-observed", "not-observed", "needs-human-review", "not-applicable"]),
+  observedValue: z.unknown(),
+  evidence: z.array(evidenceSchema).min(1),
+  interpretation: z.string().min(1),
+  limitation: z.string().min(1)
+});
+
+const analyzerLibraryResultSchema = z.strictObject({
+  libraryVersion: z.string().min(1),
+  observations: z.array(analyzerObservationSchema)
+});
+
 const analysisSchema = z.looseObject({
   requestedUrl: z.string().min(1),
   normalizedUrl: httpUrlSchema,
@@ -134,7 +152,8 @@ const analysisSchema = z.looseObject({
   sitemapXmlAvailable: z.boolean(),
   sitemapXmlStatusCode: z.number().int().min(100).max(599).nullable(),
   coverage: coverageSchema,
-  findings: z.array(findingSchema)
+  findings: z.array(findingSchema),
+  analyzerResults: analyzerLibraryResultSchema.optional()
 });
 
 const legacyAnalysisSchema = analysisSchema.extend({
@@ -493,6 +512,56 @@ const legacyHistorySchema = historySchema.extend({
   })
 });
 
+const verificationReportSchema = z.strictObject({
+  verificationVersion: z.string().min(1),
+  comparedRunId: z.string().min(1),
+  observedAt: z.iso.datetime(),
+  ruleChanges: z.strictObject({
+    new: z.array(z.string().min(1)),
+    resolved: z.array(z.string().min(1)),
+    unchanged: z.array(z.string().min(1)),
+    regressed: z.array(z.string().min(1))
+  }),
+  analyzerChanges: z.array(z.strictObject({
+    analyzerId: z.string().min(1),
+    previousVersion: z.string().min(1).nullable(),
+    currentVersion: z.string().min(1).nullable(),
+    previousStatus: z.enum(["observed", "partially-observed", "not-observed", "needs-human-review", "not-applicable"]).nullable(),
+    currentStatus: z.enum(["observed", "partially-observed", "not-observed", "needs-human-review", "not-applicable"]).nullable(),
+    classification: z.enum(["new", "resolved", "unchanged", "regressed", "changed", "indeterminate"]),
+    limitation: z.string().min(1)
+  })),
+  implementationLinks: z.array(z.strictObject({
+    artifactId: z.string().min(1),
+    sourceRuleId: z.string().min(1),
+    status: z.enum(["resolved", "unchanged", "regressed", "indeterminate"]),
+    currentEvidenceCount: z.number().int().nonnegative(),
+    explanation: z.string().min(1)
+  })),
+  pageSummary: z.array(z.strictObject({
+    role: z.enum(["target", "competitor"]),
+    inputOrder: z.number().int().min(0).max(5),
+    normalizedUrl: httpUrlSchema,
+    findingCount: z.number().int().nonnegative(),
+    analyzerObservationCount: z.number().int().nonnegative(),
+    eligibility: z.enum(["eligible", "degraded", "ineligible"])
+  })),
+  siteSummary: z.strictObject({
+    comparedPages: z.number().int().nonnegative(),
+    changedEvidenceRecords: z.number().int().nonnegative(),
+    resolvedImplementationArtifacts: z.number().int().nonnegative()
+  }),
+  evidenceDiffs: z.array(z.strictObject({
+    category: z.string().min(1),
+    field: z.string().min(1),
+    siteKey: httpUrlSchema,
+    previousValue: z.unknown(),
+    currentValue: z.unknown()
+  })),
+  causationStatement: z.literal("Website changes and observed visibility changes occurred during the same interval. This does not establish causation."),
+  limitations: z.array(z.string().min(1))
+});
+
 const runRecordSchema = z.looseObject({
   id: z.string().min(1),
   createdAt: z.iso.datetime(),
@@ -505,14 +574,16 @@ const runRecordSchema = z.looseObject({
   rankObservations: z.record(httpUrlSchema, z.number().int().min(1).max(1_000)),
   analyses: z.array(analysisSchema).min(2).max(6),
   comparison: comparisonSchema,
-  history: historySchema.nullable()
+  history: historySchema.nullable(),
+  verification: verificationReportSchema.nullable()
 });
 
 const legacyRunRecordSchema = runRecordSchema.extend({
   sites: z.array(legacyComparisonSiteSchema).min(2).max(6).optional(),
   analyses: z.array(legacyAnalysisSchema).min(2).max(6),
   comparison: legacyComparisonSchema,
-  history: legacyHistorySchema.nullable()
+  history: legacyHistorySchema.nullable(),
+  verification: verificationReportSchema.nullable().optional()
 });
 
 const storeFileSchema = z.object({
@@ -694,16 +765,21 @@ function normalizeLegacyRuns(runs: LegacyRunRecord[]): RunRecord[] {
   const normalized = runs.map((run) => normalizeLegacyRun(run));
   const byId = new Map(normalized.map((entry) => [entry.record.id, entry]));
   return normalized.map((entry) => {
-    if (!entry.source.history) return entry.record;
+    if (!entry.source.history) return { ...entry.record, verification: null };
     const previous = byId.get(entry.source.history.previousRunId);
     const recomputeHistory = entry.recomputedComparison
       || previous?.recomputedComparison === true
       || missesCurrentHistoryContract(entry.source.history);
-    if (!recomputeHistory) return entry.record;
     if (!previous) throw new Error(`No stored run matches history reference ${entry.source.history.previousRunId}`);
-    return {
+    const record = recomputeHistory ? {
       ...entry.record,
       history: diffRuns(previous.record, entry.record)
+    } : entry.record;
+    return {
+      ...record,
+      verification: recomputeHistory || !entry.source.verification
+        ? verifyResearchRuns(previous.record, record)
+        : record.verification
     };
   });
 }
@@ -754,7 +830,8 @@ function normalizeLegacyRun(run: LegacyRunRecord): {
     sites: normalizedSites,
     analyses,
     comparison,
-    history: run.history
+    history: run.history,
+    verification: run.verification ?? null
   } as unknown as RunRecord;
   return { source: run, record, recomputedComparison };
 }
@@ -993,6 +1070,9 @@ function recordAlignmentIssues(run: RunRecord, previousRun?: RunRecord, requireP
   }
   issues.push(...comparisonSemanticIssues(run));
 
+  if (!run.history && run.verification) issues.push("a first run cannot contain a verification report");
+  if (run.history && !run.verification) issues.push("a historical run must contain a verification report");
+
   if (run.history) {
     const currentOrder = run.sites.slice(1).map((site) => site.normalizedUrl);
     if (!sameUrlOrder(run.history.competitorChanges.ordering.currentOrder, currentOrder)) {
@@ -1013,6 +1093,8 @@ function recordAlignmentIssues(run: RunRecord, previousRun?: RunRecord, requireP
       if (!sameUrlOrder(run.history.competitorChanges.removedUrls, expectedRemoved)) issues.push("history removed competitor URLs are inconsistent");
       const expectedHistory = diffRuns(previousRun, run);
       issues.push(...historySemanticIssues(run.history, expectedHistory));
+      const expectedVerification = verifyResearchRuns(previousRun, run);
+      if (!equalJson(run.verification, expectedVerification)) issues.push("verification report does not match the referenced deterministic runs");
     }
     for (const change of run.history.findingChanges) {
       validateHistorySiteReference(change, run.sites, issues, "finding change");

@@ -6,7 +6,8 @@ import { compareAnalyses } from "../../packages/comparison/compare.js";
 import { diffRuns } from "../../packages/comparison/diff.js";
 import type { ComparableAnalysis } from "../../packages/comparison/types.js";
 import { JsonRunStore, RunStoreError } from "../../packages/storage/json-run-store.js";
-import type { NewRunRecord } from "../../packages/storage/types.js";
+import type { NewRunRecord, RunRecord } from "../../packages/storage/types.js";
+import { verifyResearchRuns } from "../../packages/verification/verify.js";
 import { makeAnalysis } from "../helpers/analysis.js";
 
 async function temporaryStore() {
@@ -15,6 +16,11 @@ async function temporaryStore() {
     directory,
     file: join(directory, "nested", "runs.json")
   };
+}
+
+function withVerification(previous: RunRecord, input: NewRunRecord, history: NonNullable<NewRunRecord["history"]>): NewRunRecord {
+  const current = { ...input, history };
+  return { ...current, verification: verifyResearchRuns(previous, current) };
 }
 
 function newRunInput(competitorUrls = ["https://competitor.example/"]): NewRunRecord {
@@ -35,7 +41,8 @@ function runInputFromAnalyses(target: ComparableAnalysis, competitors: Comparabl
     rankObservations,
     analyses: [target, ...competitors],
     comparison,
-    history: null
+    history: null,
+    verification: null
   };
 }
 
@@ -358,7 +365,7 @@ describe("JsonRunStore", () => {
       rankObservations: secondInput.rankObservations,
       analyses: secondInput.analyses
     });
-    const second = await store.save({ ...secondInput, history });
+    const second = await store.save(withVerification(first, secondInput, history));
     const legacyFile = JSON.parse(await readFile(file, "utf8"));
     const legacyHistory = legacyFile.runs[1].history;
     legacyHistory.competitorChanges.addedUrls.sort();
@@ -401,30 +408,34 @@ describe("JsonRunStore", () => {
       rankObservations: secondInput.rankObservations,
       analyses: secondInput.analyses
     });
-    const validSecond = { ...secondInput, history };
+    const validSecond = withVerification(first, secondInput, history);
     expect(history.metadataChanges.length).toBeGreaterThan(0);
     expect(history.findingChanges.length).toBeGreaterThan(0);
     expect(history.rankObservationChanges.length).toBeGreaterThan(0);
 
     const fabricatedObserved = structuredClone(validSecond);
-    fabricatedObserved.history.metadataChanges[0]!.currentValue = "fabricated metadata";
+    fabricatedObserved.history!.metadataChanges[0]!.currentValue = "fabricated metadata";
     await expect(store.save(fabricatedObserved)).rejects.toMatchObject({ code: "INVALID_RECORD" });
 
     const fabricatedFinding = structuredClone(validSecond);
-    fabricatedFinding.history.findingChanges[0]!.newRuleIds.push("FABRICATED_RULE");
+    fabricatedFinding.history!.findingChanges[0]!.newRuleIds.push("FABRICATED_RULE");
     await expect(store.save(fabricatedFinding)).rejects.toMatchObject({ code: "INVALID_RECORD" });
 
     const fabricatedRank = structuredClone(validSecond);
-    fabricatedRank.history.rankObservationChanges[0]!.delta = 999;
+    fabricatedRank.history!.rankObservationChanges[0]!.delta = 999;
     await expect(store.save(fabricatedRank)).rejects.toMatchObject({ code: "INVALID_RECORD" });
 
     const fabricatedCorrelation = structuredClone(validSecond);
-    fabricatedCorrelation.history.correlationSummary.interpretation = "Fabricated causal interpretation.";
+    fabricatedCorrelation.history!.correlationSummary.interpretation = "Fabricated causal interpretation.";
     await expect(store.save(fabricatedCorrelation)).rejects.toMatchObject({ code: "INVALID_RECORD" });
+
+    const fabricatedVerification = structuredClone(validSecond);
+    fabricatedVerification.verification!.causationStatement = "Website changes caused visibility changes." as never;
+    await expect(store.save(fabricatedVerification)).rejects.toMatchObject({ code: "INVALID_RECORD" });
 
     const fabricatedMembership = structuredClone(validSecond);
     const competitorSite = secondInput.sites[1]!;
-    fabricatedMembership.history.competitorChanges.observedChanges.push({
+    fabricatedMembership.history!.competitorChanges.observedChanges.push({
       scope: "competitor",
       sourceUrl: competitorSite.finalUrl,
       category: "metadata",
@@ -478,7 +489,7 @@ describe("JsonRunStore", () => {
       rankObservations: secondInput.rankObservations,
       analyses: secondInput.analyses
     });
-    const second = await store.save({ ...secondInput, history });
+    const second = await store.save(withVerification(first, secondInput, history));
 
     const legacyFile = JSON.parse(await readFile(file, "utf8"));
     for (const run of legacyFile.runs) {

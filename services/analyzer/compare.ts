@@ -4,6 +4,7 @@ import { normalizeUrl } from "../../packages/crawler/url.js";
 import { diffRuns } from "../../packages/comparison/diff.js";
 import { validateManualRankObservations } from "../../packages/ranking/types.js";
 import type { RunRecord, RunStore } from "../../packages/storage/types.js";
+import { verifyResearchRuns } from "../../packages/verification/verify.js";
 import { analyzeUrl, type AnalysisResult } from "./analyze.js";
 
 export interface CompareRunInput {
@@ -66,10 +67,16 @@ export async function compareAndSaveRun(
     analyses
   };
   const history = previous ? diffRuns(previous, currentSnapshot) : null;
+  const verification = previous ? verifyResearchRuns(previous, {
+    ...currentSnapshot,
+    comparison,
+    history
+  }) : null;
 
   return dependencies.store.save({
     ...currentSnapshot,
     comparison,
-    history
+    history,
+    verification
   });
 }

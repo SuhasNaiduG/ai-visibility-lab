@@ -79,7 +79,8 @@ function runRecord(): RunRecord {
     rankObservations: {},
     analyses: [target, competitor],
     comparison,
-    history: null
+    history: null,
+    verification: null
   };
 }
 

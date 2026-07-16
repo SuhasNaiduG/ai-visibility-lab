@@ -1,5 +1,6 @@
 import type { Evidence, Finding, Effort, Priority } from "../rules/types.js";
 import type { ImplementationArtifact } from "../proposals/types.js";
+import type { AnalyzerLibraryResult } from "../analyzers/types.js";
 
 export interface CoverageSignal {
   kind: string;
@@ -96,6 +97,7 @@ export interface ComparableAnalysis {
   sitemapXmlStatusCode: number | null;
   coverage: ComparableCoverage;
   findings: Finding[];
+  analyzerResults?: AnalyzerLibraryResult;
 }
 
 export type ComparisonRole = "target" | "competitor";

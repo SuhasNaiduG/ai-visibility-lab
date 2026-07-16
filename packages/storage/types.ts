@@ -1,5 +1,6 @@
 import type { ComparableAnalysis, ComparisonResult, ComparisonSite, ManualRankObservations } from "../comparison/types.js";
 import type { HistoricalComparison } from "../comparison/diff.js";
+import type { VerificationReport } from "../verification/types.js";
 
 export const STORAGE_SCHEMA_VERSION = "1" as const;
 export const APPLICATION_VERSION = "1.0.0" as const;
@@ -17,6 +18,7 @@ export interface RunRecord {
   analyses: ComparableAnalysis[];
   comparison: ComparisonResult;
   history: HistoricalComparison | null;
+  verification: VerificationReport | null;
 }
 
 export type NewRunRecord = Omit<

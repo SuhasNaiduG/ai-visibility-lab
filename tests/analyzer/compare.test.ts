@@ -75,6 +75,7 @@ describe("compareAndSaveRun", () => {
     expect(second.history).toEqual(expect.objectContaining({ previousRunId: first.id }));
     expect(second.history?.contentCountChanges).toEqual([]);
     expect(second.history?.competitorChanges.observedChanges).toEqual([]);
+    expect(second.verification).toEqual(expect.objectContaining({ comparedRunId: first.id, verificationVersion: "1.0.0" }));
 
     const tracked = await compareAndSaveRun({
       ...input,
@@ -120,6 +121,8 @@ describe("compareAndSaveRun", () => {
     expect(second.history?.contentCountChanges).toEqual(expect.arrayContaining([
       expect.objectContaining({ scope: "target", field: "wordCount", previousValue: 200, currentValue: 360 })
     ]));
+    expect(second.verification?.ruleChanges.resolved).toContain("HEADING_MULTIPLE_H1@1.0.0");
+    expect(second.verification?.causationStatement).toMatch(/does not establish causation/u);
     expect((await store.list()).map((run) => run.id)).toEqual([second.id, first.id]);
   });
 
