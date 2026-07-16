@@ -163,6 +163,10 @@ describe("demo implementation and verification UI", () => {
     expect(source).toContain('/api/research-sources');
     expect(source).toContain('/api/visibility-observations');
     expect(html).toContain("No search engine is scraped");
+    expect(source).toContain("Filter findings by category");
+    expect(html).toContain("Skip to research workspace");
+    expect(html).toContain('role="tablist"');
+    expect(`${source}\n${html}`).not.toMatch(/Ã|â€¦|â€”|Â/u);
   });
 });
 

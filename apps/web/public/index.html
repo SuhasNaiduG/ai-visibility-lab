@@ -5,9 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>AI Visibility Engineering Lab</title>
     <meta name="description" content="Deterministic public-page evidence, comparison, and change verification." />
-    <link rel="stylesheet" href="/styles.css?v=20260715-comparison-evidence" />
+    <link rel="stylesheet" href="/styles.css?v=20260716-research-platform" />
   </head>
   <body>
+    <a class="skip-link" href="#workspace">Skip to research workspace</a>
     <header class="site-header">
       <div>
         <p class="eyebrow">Deterministic evidence lab</p>
@@ -17,18 +18,18 @@
       <div class="status" id="health-status" aria-live="polite">Checking service…</div>
     </header>
 
-    <main>
-      <nav class="tabs" aria-label="Workflows">
-        <button class="tab active" type="button" data-panel="projects-panel">Projects</button>
-        <button class="tab" type="button" data-panel="analyze-panel">Single-site analysis</button>
-        <button class="tab" type="button" data-panel="compare-panel">Competitor comparison</button>
-        <button class="tab" type="button" data-panel="history-panel">Run history</button>
-        <button class="tab" type="button" data-panel="visibility-panel">Visibility observations</button>
-        <button class="tab" type="button" data-panel="sources-panel">Research sources</button>
-        <button class="tab" type="button" data-panel="roadmap-panel">Roadmap</button>
+    <main id="workspace">
+      <nav class="tabs" aria-label="Workflows" role="tablist">
+        <button class="tab active" type="button" role="tab" aria-selected="true" aria-controls="projects-panel" data-panel="projects-panel">Projects</button>
+        <button class="tab" type="button" role="tab" aria-selected="false" aria-controls="analyze-panel" data-panel="analyze-panel">Single-site analysis</button>
+        <button class="tab" type="button" role="tab" aria-selected="false" aria-controls="compare-panel" data-panel="compare-panel">Competitor comparison</button>
+        <button class="tab" type="button" role="tab" aria-selected="false" aria-controls="history-panel" data-panel="history-panel">Run history</button>
+        <button class="tab" type="button" role="tab" aria-selected="false" aria-controls="visibility-panel" data-panel="visibility-panel">Visibility observations</button>
+        <button class="tab" type="button" role="tab" aria-selected="false" aria-controls="sources-panel" data-panel="sources-panel">Research sources</button>
+        <button class="tab" type="button" role="tab" aria-selected="false" aria-controls="roadmap-panel" data-panel="roadmap-panel">Roadmap</button>
       </nav>
 
-      <section id="projects-panel" class="panel active" aria-labelledby="projects-heading">
+      <section id="projects-panel" class="panel active" role="tabpanel" aria-labelledby="projects-heading">
         <div class="panel-heading">
           <div>
             <p class="step">Project â†’ Crawl â†’ Evidence</p>
@@ -56,7 +57,7 @@
         <div id="crawl-results" class="results" aria-live="polite"></div>
       </section>
 
-      <section id="analyze-panel" class="panel" aria-labelledby="analyze-heading" hidden>
+      <section id="analyze-panel" class="panel" role="tabpanel" aria-labelledby="analyze-heading" hidden>
         <div class="panel-heading">
           <div>
             <p class="step">Observe → Measure → Analyze</p>
@@ -75,7 +76,7 @@
         <div id="analyze-results" class="results" aria-live="polite"></div>
       </section>
 
-      <section id="compare-panel" class="panel" aria-labelledby="compare-heading" hidden>
+      <section id="compare-panel" class="panel" role="tabpanel" aria-labelledby="compare-heading" hidden>
         <div class="panel-heading">
           <div>
             <p class="step">Compare → Save → Monitor</p>
@@ -148,7 +149,7 @@
         <div id="compare-results" class="results" aria-live="polite"></div>
       </section>
 
-      <section id="history-panel" class="panel" aria-labelledby="history-heading" hidden>
+      <section id="history-panel" class="panel" role="tabpanel" aria-labelledby="history-heading" hidden>
         <div class="panel-heading">
           <div>
             <p class="step">Verify → Monitor</p>
@@ -160,7 +161,7 @@
         <div id="history-results" class="results" aria-live="polite"></div>
       </section>
 
-      <section id="visibility-panel" class="panel" aria-labelledby="visibility-heading" hidden>
+      <section id="visibility-panel" class="panel" role="tabpanel" aria-labelledby="visibility-heading" hidden>
         <div class="panel-heading">
           <div>
             <p class="step">Observe manually â†’ Record context â†’ Compare intervals</p>
@@ -188,7 +189,7 @@
         <div id="visibility-results" class="results" aria-live="polite"></div>
       </section>
 
-      <section id="sources-panel" class="panel" aria-labelledby="sources-heading" hidden>
+      <section id="sources-panel" class="panel" role="tabpanel" aria-labelledby="sources-heading" hidden>
         <div class="panel-heading">
           <div>
             <p class="step">Guidance â†’ Heuristic â†’ Limitation</p>
@@ -200,7 +201,7 @@
         <div id="sources-results" class="results" aria-live="polite"></div>
       </section>
 
-      <section id="roadmap-panel" class="panel roadmap" aria-labelledby="roadmap-heading" hidden>
+      <section id="roadmap-panel" class="panel roadmap" role="tabpanel" aria-labelledby="roadmap-heading" hidden>
         <h2 id="roadmap-heading">Prototype roadmap</h2>
         <div class="roadmap-grid">
           <article><h3>Working now</h3><ul><li>Bounded multi-page research projects</li><li>Single-page analysis</li><li>One-to-five competitor comparison</li><li>Evidence-backed findings and proposals</li><li>Later-run verification and history</li><li>Versioned research sources</li><li>Optional provider-neutral AI interpretation contract — disabled until configured</li></ul></article>
@@ -212,6 +213,6 @@
     <footer>
       <p><strong>Evidence boundary:</strong> public-page observations and transparent editorial heuristics only. No private analytics, backlink data, automatic rankings, configured AI provider by default, or causation claims.</p>
     </footer>
-    <script src="/app.js?v=20260715-demo-workspace" defer></script>
+    <script src="/app.js?v=20260716-research-platform" defer></script>
   </body>
 </html>

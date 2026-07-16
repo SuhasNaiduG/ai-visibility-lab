@@ -73,18 +73,44 @@ function section(title, contents, options = {}) {
 
 function renderFindings(findings = []) {
   if (!findings.length) return element("p", { className: "empty", text: "No deterministic findings were triggered by the available evidence." });
-  const list = element("div", { className: "finding-list" });
-  for (const finding of findings) {
-    const tags = element("div", { className: "tags" }, [finding.ruleId, finding.category, finding.priority, finding.effort, finding.classification].filter(Boolean).map((tag) => element("span", { className: "tag", text: tag })));
-    const details = element("div", { className: "detail-grid" }, [
-      labelled("Why it may matter", finding.whyItMatters),
-      labelled("Exact implementation", finding.exactImplementation),
-      labelled("Expected outcome", finding.expectedOutcome),
-      labelled("Verification", finding.verificationMethod)
-    ]);
-    list.append(element("article", { className: `finding ${finding.priority ?? ""}` }, [tags, element("h3", { text: finding.problem }), details, jsonDetails(finding.evidence ?? [], "Structured evidence") ]));
+  const wrapper = element("div", { className: "filterable-view" });
+  const category = element("select", { attributes: { "aria-label": "Filter findings by category" } });
+  category.append(element("option", { text: "All categories", attributes: { value: "" } }));
+  for (const value of [...new Set(findings.map((finding) => finding.category).filter(Boolean))].sort()) {
+    category.append(element("option", { text: value, attributes: { value } }));
   }
-  return list;
+  const priority = element("select", { attributes: { "aria-label": "Filter findings by priority" } });
+  priority.append(element("option", { text: "All priorities", attributes: { value: "" } }));
+  for (const value of ["high", "medium", "low"]) priority.append(element("option", { text: value, attributes: { value } }));
+  const count = element("span", { className: "filter-count" });
+  const controls = element("div", { className: "filter-bar" }, [category, priority, count]);
+  const list = element("div", { className: "finding-list" });
+  const draw = () => {
+    clear(list);
+    const filtered = findings.filter((finding) => (!category.value || finding.category === category.value) && (!priority.value || finding.priority === priority.value));
+    count.textContent = `${filtered.length} of ${findings.length} findings`;
+    if (!filtered.length) {
+      list.append(element("p", { className: "empty", text: "No findings match the current filters." }));
+      return;
+    }
+    for (const finding of filtered) {
+      const tags = element("div", { className: "tags" }, [finding.ruleId, `v${finding.ruleVersion ?? "legacy"}`, finding.category, finding.priority, finding.effort, finding.classification].filter(Boolean).map((tag) => element("span", { className: "tag", text: tag })));
+      const details = element("div", { className: "detail-grid" }, [
+        labelled("Why it may matter", finding.whyItMatters),
+        labelled("Exact implementation", finding.exactImplementation),
+        labelled("Expected outcome", finding.expectedOutcome),
+        labelled("Verification", finding.verificationMethod),
+        labelled("Confidence", finding.confidence),
+        labelled("Limitation", finding.limitation)
+      ]);
+      list.append(element("article", { className: `finding ${finding.priority ?? ""}` }, [tags, element("h3", { text: finding.problem }), details, jsonDetails(finding.evidence ?? [], "Structured evidence") ]));
+    }
+  };
+  category.addEventListener("change", draw);
+  priority.addEventListener("change", draw);
+  draw();
+  wrapper.append(controls, list);
+  return wrapper;
 }
 
 function labelled(label, value) {
@@ -457,7 +483,7 @@ function renderOptionalAiInterpretation(run) {
   button.addEventListener("click", async () => {
     button.disabled = true;
     clear(output);
-    output.append(element("p", { className: "empty", text: "Checking configuration and grounding the request in saved evidenceâ€¦" }));
+    output.append(element("p", { className: "empty", text: "Checking configuration and grounding the request in saved evidence…" }));
     try {
       const status = await api("/api/ai/status");
       if (!status.enabled) throw new Error("Optional AI interpretation is not configured. Deterministic evidence and proposals remain fully available.");
@@ -755,7 +781,7 @@ function renderCrawlProject(project, container) {
 
   const evidenceList = element("div", { className: "crawl-evidence-list" });
   for (const page of project.pages ?? []) {
-    const summary = `${page.order + 1}. ${page.status.toUpperCase()} â€” ${page.url}`;
+    const summary = `${page.order + 1}. ${page.status.toUpperCase()} — ${page.url}`;
     if (!page.analysis) {
       evidenceList.append(element("details", { className: `crawl-page crawl-${page.status}` }, [
         element("summary", { text: summary }),
@@ -791,7 +817,7 @@ async function loadResearchSources() {
   const error = $("#sources-error");
   hideError(error);
   clear(results);
-  results.append(element("p", { className: "empty", text: "Loading versioned sourcesâ€¦" }));
+  results.append(element("p", { className: "empty", text: "Loading versioned sources…" }));
   try {
     const registry = await api("/api/research-sources");
     hideError(error);
@@ -829,7 +855,7 @@ async function loadVisibilityObservations() {
   const error = $("#visibility-error");
   hideError(error);
   clear(results);
-  results.append(element("p", { className: "empty", text: "Loading manual observationsâ€¦" }));
+  results.append(element("p", { className: "empty", text: "Loading manual observations…" }));
   try {
     const observations = await api("/api/visibility-observations");
     hideError(error);
@@ -915,7 +941,10 @@ async function loadRunHistory() {
 }
 
 $$('.tab').forEach((button) => button.addEventListener("click", () => {
-  $$('.tab').forEach((item) => item.classList.toggle("active", item === button));
+  $$('.tab').forEach((item) => {
+    item.classList.toggle("active", item === button);
+    item.setAttribute("aria-selected", String(item === button));
+  });
   $$('.panel').forEach((panel) => {
     const active = panel.id === button.dataset.panel;
     panel.classList.toggle("active", active);
@@ -931,7 +960,7 @@ $("#crawl-form").addEventListener("submit", async (event) => {
   const form = event.currentTarget;
   const error = $("#crawl-error");
   hideError(error);
-  setBusy(form, true, "Discovering and analyzing a bounded same-origin page setâ€¦");
+  setBusy(form, true, "Discovering and analyzing a bounded same-origin page set…");
   try {
     const values = Object.fromEntries(new FormData(form));
     const payload = {
@@ -988,7 +1017,7 @@ $("#visibility-form").addEventListener("submit", async (event) => {
   const form = event.currentTarget;
   const error = $("#visibility-error");
   hideError(error);
-  setBusy(form, true, "Saving the manual observation and its contextâ€¦");
+  setBusy(form, true, "Saving the manual observation and its context…");
   try {
     const values = Object.fromEntries(new FormData(form));
     const payload = {
