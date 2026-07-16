@@ -1,562 +1,360 @@
-# Deterministic MVP Change Report
+# Change Report
 
-## Report basis
+Date: 2026-07-16
 
-- Repository: `ai-visibility-lab` (the existing repository; no duplicate repository was created)
-- Foundation checkpoint: `354df4c feat: establish deterministic analyzer foundation`
-- Prior verified documentation checkpoint: `abe3b16 docs: document architecture methodology and handoff`
-- Focused comparison hardening commit: `fix: validate comparison eligibility and preserve site order` (exact hash is reported in the completion handoff because a commit cannot contain its own hash)
-- Report date: 2026-07-15
-- Master handoff archive: `AI_Visibility_Lab_GPT_Work_Handoff.zip`
-- Archive SHA-256: `0E4BBA1FA072113E27B58D6A10F7A9B9CC046FB7336A41BFB27A18A84F7E7202`
-- Implementation policy: deterministic public evidence first; no AI API, synthetic visibility score, automatic ranking collection, or causation claim
+Repository: `C:\Users\User_2\Documents\Projects\ai-visibility-lab`
 
-The repository, all foundation source/tests/documentation, the two specification documents in the handoff archive, and the complete Git history were reviewed before implementation. The checkpoint was clean and the foundation suite passed before changes began.
+Branch: `rooz-final-demo`
+
+Verified foundation: `354df4c`
 
 ## Outcome
 
-The checkpoint is now a locally runnable deterministic MVP that:
-
-1. validates and safely fetches a public page;
-2. extracts structured, source-linked technical/content evidence;
-3. applies 34 stable explainable rules;
-4. compares one target with one to three competitors through the identical analyzer;
-5. exposes 43 raw comparison metrics and structured threshold deltas;
-6. accepts optional manual rank observations without pretending to collect rankings;
-7. persists full comparison runs in a validated atomic local JSON store;
-8. diffs a later run against the newest matching target run;
-9. exposes health, analysis, comparison, and history APIs;
-10. provides a responsive browser workflow for analysis, comparison, evidence, limitations, and saved history;
-11. classifies usable, degraded, and ineligible comparison retrievals before benchmark calculations; and
-12. preserves target-first submitted identities and eligibility-aware historical uncertainty across responses and storage.
-
-No new repository, duplicate README, AI provider, SERP provider, database service, or external analytics connector was introduced.
-
-## Architecture flow
+The repository is now a deterministic AI visibility research and comparison MVP covering:
 
 ```text
-Browser (static HTML/CSS/JS)
-  → strict Express request boundary
-    → single-site orchestration
-      → URL normalization
-      → literal/DNS public-network validation
-      → bounded request + per-hop redirect validation
-      → deterministic HTML parsing
-      → conventional robots.txt / sitemap.xml checks
-      → inspectable coverage extraction
-      → pure deterministic rule evaluation
-    → optional equal-path target/competitor projection
-      → stable normalized submitted identities in target-first order
-      → evidence-backed page eligibility and benchmark admission
-      → 43-metric raw matrix
-      → structured threshold deltas, side-by-side evidence, gaps, and advantages
-      → newest prior target lookup
-      → normalized-identity historical field/finding/order/rank diff
-      → validated temporary write + atomic JSON rename
-  ← structured JSON with raw evidence and limitations
+Observe -> Measure -> Analyze -> Compare -> Propose -> Verify -> Monitor
 ```
 
-Layer ownership:
+Users can run bounded site projects, inspect page/site evidence, compare a target with up to five competitors, review exact differences and implementation artifacts, reopen/export saved work, verify a later run, record manual visibility observations, inspect a versioned research registry, and deploy one durable SQLite-backed instance. No AI API, rank provider, synthetic visibility score, ranking guarantee, fabricated production record, or weakened validation was introduced.
 
-- `packages/crawler/`: URL/network acquisition policy and evidence
-- `packages/parser/`: page, text, link, markup, and media extraction
-- `packages/entities/`: conservative source-linked coverage patterns
-- `packages/rules/`: stable findings and evidence contracts
-- `packages/comparison/`: metrics, deltas, gaps, advantages, and historical diff
-- `packages/ranking/`: manual validation and an unimplemented future-provider contract
-- `packages/storage/`: persistence port and local JSON adapter
-- `packages/schemas/`: strict HTTP input contracts
-- `services/analyzer/`: orchestration and HTTP presentation
-- `apps/web/public/`: presentation only; no analysis rules
+## Original comparison persistence root cause
 
-## Endpoints
+The failing component was **history semantic comparison**. It was not `runRecordSchema`, target/site `recordAlignmentIssues`, persisted-order alignment, URL identity, or an actual value mismatch.
 
-| Method | Path | Contract and result |
-|---|---|---|
-| `GET` | `/health` | Returns `{ "status": "ok" }`. |
-| `POST` | `/api/analyze` | Strict body `{ url }`; returns the complete analysis, findings, raw evidence, request/resource evidence, and limitations implicit in the fields. |
-| `POST` | `/api/compare` | Strict target + one-to-three unique competitors, optional 200-character query label, and optional manual positions 1–1,000; returns and saves a full `RunRecord` with ordered identities, eligibility, exclusions, side-by-side evidence, conclusion availability, and identity-aware history. |
-| `GET` | `/api/runs` | Returns newest-first run summaries. |
-| `GET` | `/api/runs/latest?targetUrl=...` | Returns the newest saved run matching the normalized target URL. |
-| `GET` | `/api/runs/:id` | Returns one full saved run. |
-| `GET` | `/` | Serves the local browser interface. |
+The exact first rejected field was:
 
-Handled failures use `{ error: { code, message, details } }`. Statuses are 400 for validation/unsafe target, 404 for unknown run/endpoint, 413 for an oversized JSON body, 500 for store/internal failures, 502 for upstream/size/redirect failures, and 504 for timeout. No stack trace or internal cause is serialized. The complete contract is in `docs/api.md`.
+```text
+history.technicalChanges[0].currentValue
+```
 
-## Acquisition and evidence rules
+Its tracked `field` was `indexability`. The rejected value in the deterministic reproduction was semantically:
 
-### Network policy
+```json
+{
+  "reason": "Second observed reason.",
+  "isIndexable": true,
+  "status": "explicit-index"
+}
+```
 
-- HTTP/HTTPS only; fragments are removed and missing schemes receive HTTPS.
-- Literal and DNS-resolved loopback, private, link-local, reserved, multicast, unspecified, and mixed public/non-public answers are rejected.
-- Every redirect `Location` is resolved and revalidated before following.
-- Default end-to-end deadline: 10,000 ms.
-- Default redirect limit: five hops.
-- Default HTML limit: 2,000,000 streamed bytes.
-- Default user agent: `AI-Visibility-Lab/1.0`.
-- HTML, `robots.txt`, and `sitemap.xml` use the same policy and injectable fetch/DNS seams.
-- Stable crawler codes: `INVALID_URL`, `PRIVATE_NETWORK_TARGET`, `FETCH_TIMEOUT`, `RESPONSE_TOO_LARGE`, `TOO_MANY_REDIRECTS`, and `UPSTREAM_FETCH_FAILED`.
+After Zod normalized the enclosing analysis, the recomputed equivalent object used schema insertion order:
 
-### Extracted evidence
+```json
+{
+  "status": "explicit-index",
+  "isIndexable": true,
+  "reason": "Second observed reason."
+}
+```
 
-- request/final URL, HTTP status, response time, timestamp, redirect chain, and network checks;
-- title/description values and lengths;
-- canonical raw value, resolved URL, relationship, error, and element count;
-- robots directives and an explicit indexability interpretation;
-- document language and viewport;
-- every H1–H6 item, empty headings, level jumps, and normalized repetition;
-- normalized static visible text, word/sentence/question counts, question text, FAQ/breadcrumb indicators, and direct-answer pairs;
-- parsed JSON-LD, raw blocks, parse errors, recursive schema types, Open Graph, and Twitter card data;
-- resolved links, exact-host classification, unique destinations/domains, anchor summaries, and empty anchors;
-- images, resolved sources, alt values, and missing/empty-alt issues;
-- entity, service, location, trust, contact, and content-section terms with source fields, selectors/snippets, method, and heuristic flags;
-- conventional root robots/sitemap availability, status, redirect, network, and failure evidence.
+The previous `equalJson()` used `JSON.stringify(left) === JSON.stringify(right)`, so identical nested object values with different property insertion order were rejected as `INVALID_RECORD`. Arrays were not the problem.
 
-### Stable deterministic rules (34)
+Fix `e8d946a` replaced that equality with recursive stable object-key serialization while retaining array order and strict value comparison. The API also forwards structured `RunStoreError.details`, and a temporary isolated-store API regression covers compare, save, second run, history, list, reopen, and latest. Validation remains strict against fabricated values.
 
-| Rule ID | Trigger | Classification |
-|---|---|---|
-| `HTTP_NON_2XX` | Page status is outside 200–299. | observation |
-| `REDIRECT_OBSERVED` | One or more redirect hops were recorded. | observation |
-| `ROBOTS_TXT_MISSING` | Conventional root robots check is not available. | observation |
-| `SITEMAP_XML_MISSING` | Conventional root sitemap check is not available. | observation |
-| `INDEXABILITY_NOINDEX` | Parsed robots directives explicitly contain `noindex`. | observation |
-| `CANONICAL_MISSING` | No canonical element is observed. | observation |
-| `CANONICAL_MISMATCH` | Resolved canonical differs from final URL. | observation |
-| `CANONICAL_INVALID` | Canonical is empty, malformed, or unsupported. | observation |
-| `TITLE_MISSING` | No non-empty title. | observation |
-| `TITLE_LENGTH_SHORT` | Title is shorter than the transparent 30-character review range. | editorial heuristic |
-| `TITLE_LENGTH_LONG` | Title exceeds the transparent 60-character review range. | editorial heuristic |
-| `META_DESCRIPTION_MISSING` | No non-empty description. | observation |
-| `META_DESCRIPTION_LENGTH_SHORT` | Description is shorter than the transparent 70-character review range. | editorial heuristic |
-| `META_DESCRIPTION_LENGTH_LONG` | Description exceeds the transparent 160-character review range. | editorial heuristic |
-| `DOCUMENT_LANGUAGE_MISSING` | Root HTML has no non-empty language value. | observation |
-| `VIEWPORT_MISSING` | No viewport meta element. | observation |
-| `HEADING_MISSING_H1` | H1 count is zero. | observation |
-| `HEADING_MULTIPLE_H1` | More than one H1 is observed; responsive intent must be reviewed. | observation |
-| `HEADING_EMPTY` | At least one heading has no normalized text. | observation |
-| `HEADING_LEVEL_JUMP` | Adjacent heading levels increase by more than one. | observation |
-| `HEADING_REPEATED_TEXT` | Normalized heading text repeats. | observation |
-| `JSONLD_MISSING` | No JSON-LD block. | observation |
-| `JSONLD_INVALID` | At least one JSON-LD block fails parsing. | observation |
-| `IDENTITY_SCHEMA_MISSING` | An identity-relevant home page lacks an Organization/LocalBusiness-style type. | editorial heuristic |
-| `BREADCRUMB_SCHEMA_MISSING` | A non-home page has visible breadcrumb evidence but no `BreadcrumbList`. | editorial heuristic |
-| `INTERNAL_LINKS_MISSING` | No crawlable internal HTTP(S) link. | observation |
-| `INTERNAL_LINKS_LOW` | One or two internal links; transparent review threshold. | editorial heuristic |
-| `IMAGE_ALT_MISSING` | One or more image alt values are missing or empty; decorative intent must be reviewed. | observation |
-| `EMPTY_ANCHOR_TEXT` | A crawlable link has no text content; accessible-name context must be reviewed. | observation |
-| `DIRECT_ANSWER_MISSING` | Questions exist but no detected nearby/direct answer. | editorial heuristic |
-| `ENTITY_COVERAGE_MISSING` | Business-relevant signals exist without a supported explicit entity signal. | editorial heuristic |
-| `SERVICE_COVERAGE_MISSING` | A content-rich relevant home page lacks supported explicit service terms. | editorial heuristic |
-| `LOCATION_COVERAGE_MISSING` | Local-business schema exists without an extracted location. | editorial heuristic |
-| `CONTACT_SIGNALS_MISSING` | Local-business schema exists without an extracted contact signal. | editorial heuristic |
+## Architecture changes
 
-Every finding includes `ruleId`, category, problem, structured evidence, context, exact implementation direction, expected outcome, verification method, priority, effort, and classification.
+1. **Acquisition** — shared URL/redirect/DNS/body/time/content-type policy plus resource discovery and same-origin BFS project crawling.
+2. **Evidence** — normalized/static DOM extraction with raw source values, selectors/snippets/methods, JSON-LD errors, links/media, questions/answers, and lexical/structured coverage.
+3. **Analysis** — stable findings plus analyzer library version `1.0.0` across technical, content, entity, trust/YMYL, and retrieval-support groups.
+4. **Research provenance** — registry version `1.0.0` separates official/standards/schema/accessibility guidance from bounded internal heuristics.
+5. **Comparison** — ordered target + up to five competitors, eligibility before benchmarks, 43 raw metrics, exact deltas/thresholds/evidence, advantages/shared gaps, and no composite score.
+6. **Proposals** — deterministic, evidence-linked, review-gated artifacts with assumptions/facts/reviewer/verification.
+7. **Verification/history** — normalized submitted-URL identity, semantic field diffs, rule/analyzer version awareness, proposal linkage, evidence diffs, and non-causation boundary.
+8. **Intelligence seams** — optional AI contracts/guards with no adapter; manual observation store/provider interface with no automated provider.
+9. **Persistence** — unchanged `RunStore` port, atomic JSON, migration-backed transactional SQLite, strict recomputation on save/read.
+10. **Reporting/UI/deployment** — JSON/Markdown/CSV reports, accessible browser workspace, validated server config, safe structured logs, graceful shutdown, Render persistent disk.
 
-## Comparison model
+See `docs/architecture.md` for the full flow and `docs/file-map.md` for edit ownership.
 
-### Raw matrix metrics (43)
+## Completed features
 
-| Group | Metrics |
-|---|---|
-| Retrieval (8) | `statusCode`, `redirectCount`, `indexable`, `indexabilityStatus`, `robotsTxtAvailable`, `robotsTxtStatusCode`, `sitemapXmlAvailable`, `sitemapXmlStatusCode` |
-| Metadata (9) | `hasTitle`, `titleLength`, `hasMetaDescription`, `descriptionLength`, `canonicalMatches`, `canonicalStatus`, `hasLanguage`, `documentLanguage`, `viewportPresent` |
-| Headings (6) | `h1Count`, `h1StructureValid`, `totalHeadingCount`, `headingJumpCount`, `emptyHeadingCount`, `repeatedHeadingCount` |
-| Content/answerability (4) | `wordCount`, `questionCount`, `faqIndicatorCount`, `directAnswerCount` |
-| Structured data (2) | `schemaTypeCount`, `jsonLdParseErrorCount` |
-| Links/media (7) | `internalLinkCount`, `externalLinkCount`, `uniqueInternalUrlCount`, `uniqueExternalDomainCount`, `imageCount`, `imagesMissingAltCount`, `emptyAnchorCount` |
-| Coverage (7) | `topicTermCount`, `serviceTermCount`, `locationTermCount`, `hasIdentitySignals`, `hasTrustSignals`, `hasContactSignals`, `hasLocationSignals` |
+- Safe single-page analysis and conventional root resource checks.
+- Bounded multi-page projects (1–50 pages, depth 0–5, delay 0–60000 ms).
+- Deterministic page statuses and aggregates, sitemap discovery, robots awareness, duplicate/redirect handling, partial results.
+- Versioned rules/analyzers/evidence/limitations.
+- One-to-five competitor comparison with stable order and exclusion policy.
+- Target gaps, target advantages, competitor advantages, shared gaps, competitor-only topics/questions/schema.
+- Reviewable title/description/canonical/heading/FAQ/schema/provider/reference/risk/contact/link/brief/table/alt artifacts.
+- First/second-run history, verification, proposal links, analyzer changes, and evidence diffs.
+- Saved list/reopen/latest and stale browser-history-error clearing.
+- Manual rank/citation observations and inactive provider truthfulness.
+- Optional AI interpretation boundary with mocked validation only.
+- Atomic JSON and durable single-instance SQLite storage/migrations.
+- JSON, Markdown, CSV complete exports.
+- Projects, Crawl Explorer, Evidence Explorer, matrix, findings filters, implementation, verification, history, observations, sources, roadmap.
+- Production start, health, environment validation, bounded settings, structured logs, graceful shutdown, Render blueprint, persistent disk, fixture-only demo fallback.
 
-`topicTermCount` is explicitly defined as the union of inspected content-section, service, entity, and location terms. It is not a semantic topic model.
+## API endpoints
 
-### Eligibility, ordered identity, and visible evidence
+| Method | Path | Purpose |
+| --- | --- | --- |
+| GET | `/health` | Process health |
+| POST | `/api/analyze` | Unsaved page evidence/rules/analyzers |
+| POST | `/api/projects/crawl` | Bounded site research project |
+| POST | `/api/compare` | Analyze, compare, history/verify, save |
+| GET | `/api/runs` | Run summaries |
+| GET | `/api/runs/latest?targetUrl=...` | Latest normalized-target run |
+| GET | `/api/runs/:id` | Reopen validated run |
+| GET | `/api/runs/:id/export?format=json|markdown|csv` | Complete export |
+| GET | `/api/research-sources` | Versioned source registry |
+| GET | `/api/ai/status` | Truthful adapter status |
+| POST | `/api/runs/:id/interpretations` | Optional saved-evidence interpretation |
+| GET | `/api/visibility-providers` | Manual/approved provider status |
+| POST | `/api/visibility-observations` | Save manual context |
+| GET | `/api/visibility-observations?targetUrl=...` | List/filter observations |
 
-The focused hardening adds a deterministic admission step before competitive conclusions:
+## Deterministic rule and analyzer coverage
 
-- Non-2xx responses are `ineligible`.
-- HTTP 200 access-denied, bot/CAPTCHA/security, and error responses are `ineligible` when the observed title or bounded low-evidence visible response matches a stable pattern.
-- Empty responses, responses under 100 words without normal title/description/heading/link/schema evidence, and responses under 20 words with fewer than two normal page signals are `ineligible`.
-- When no ineligible condition applies, responses under 50 words, responses of at least 100 words with no normal page signal, or responses under 100 words with exactly one normal page signal are `degraded` but remain usable benchmarks.
-- Other successful responses are `eligible`.
+Stable finding rules cover non-2xx, redirects, resources, noindex, canonical states, metadata/language/viewport, heading structure, JSON-LD/identity/breadcrumb schema, internal links, image alternatives, empty anchors, and direct-answer structure. Each has rule version, classification/confidence, evidence, exact implementation, outcome, verification, priority, effort, and limitation.
 
-Every eligibility reason includes a stable code and structured retrieval evidence. Every submitted site remains visible in the matrix and raw retrieval presentation. An ineligible competitor is listed in `excludedCompetitorUrls` and contributes to no scalar, boolean, or set conclusion. An ineligible target, or a comparison with no usable competitor, produces `conclusionStatus: "unavailable"` and empty gap, advantage, and competitor-only arrays. Remaining usable comparisons are `partial` if any site is degraded/ineligible and `complete` otherwise.
+Analyzer observations cover 33 versioned checks: 6 technical, 9 content/answerability, 6 entity, 7 trust/YMYL, and 5 retrieval-support. Statuses are observed, partially observed, not observed, needs human review, or not applicable. “Not observed” is page-scoped only.
 
-When any site is ineligible, `incompleteMessage` is exactly:
+## Comparison metrics and thresholds
 
-> Comparison incomplete: this website did not return a usable page to the analyzer. Raw retrieval evidence is shown, but it was excluded from competitive conclusions.
+The 43 matrix metrics include:
 
-The message is `null` when no site is ineligible, including degraded-only partial results.
+- status, redirects, indexability and root resources;
+- title/description/canonical/language/viewport;
+- H1 validity, headings, jumps, empty/repeated headings;
+- words, questions, FAQ signals, direct answers;
+- schema types and JSON-LD errors;
+- internal/external/unique links/domains;
+- images, missing alt, empty anchors;
+- topic/service/location counts and identity/trust/contact/location presence.
 
-Stable ordered identities are created from submitted URLs before parallel analysis. The target remains input order `0`; competitors retain request order `1` through `3`. Each site stores `role`, trimmed `inputUrl`, normalized submitted `normalizedUrl`, fetched `finalUrl`, and eligibility. The normalized submitted URL is the history identity; redirects remain observable final-URL changes.
+Scalar comparison thresholds are explicit: two headings, 100 words, three internal links, and one for question/answer, missing-alt, heading-error, JSON-LD-error, empty-anchor, service, and location deltas. Reverse metrics treat fewer errors/issues as favorable. Boolean rules compare presence/status. Set rules expose competitor-only schema, topics, and questions. All conclusions include exact target/benchmark values; counts are review context rather than optimization targets.
 
-Every emitted gap carries non-empty target evidence and one evidence bundle per usable competitor. Each bundle makes `normalizedUrl`, `inputOrder`, `observedValue`, and the relevant `benchmark` boolean visible beside nested source URL/field/value/fetch-time evidence. Ineligible competitors remain visible as excluded raw retrieval evidence, not as empty or misleading benchmark panels.
+Eligibility rules prevent non-2xx, access-denied, bot/CAPTCHA/security/error, empty, and bounded near-empty pages from becoming benchmarks. Degraded pages remain usable with warnings. Ineligible pages remain visible as raw retrieval evidence.
 
-Additive response and storage fields:
+## History and verification logic
 
-| Contract | Added fields |
-|---|---|
-| `RunRecord` / `RunSummary` | target-first `sites` identities and eligibility |
-| `ComparisonResult` | `sites`, `conclusionStatus`, `incompleteMessage`, `excludedCompetitorUrls` |
-| Matrix row | `inputOrder`, `inputUrl`, `eligibility` alongside normalized/final URLs |
-| Competitor evidence | `normalizedUrl`, `inputOrder`, `observedValue`, `benchmark`, nested `evidence` |
-| Observed/finding history | stable `siteKey`, input order, previous/current source URLs, `indeterminateRuleIds` |
-| Competitor history | complete previous/current order, `orderChanged`, and explicit position `moves` |
+- Baseline: newest stored run with the same normalized submitted target URL.
+- Pairing: normalized submitted URL, never final redirect URL or array position alone.
+- Membership: competitor added/removed tracked separately from relative reordering.
+- Fields: technical, metadata, schema, headings, content, links, and media.
+- Findings: stable IDs become new/resolved/unchanged; incomparable retrieval makes differences indeterminate.
+- Rank context: compared only with matching query label and comparable target evidence; delta is current position minus previous position.
+- Verification: `ruleId@ruleVersion`, analyzer ID/version/status, proposal links, page/site summaries, evidence diffs.
+- Semantic validation: saved comparison/history/verification is recomputed; object keys are order-insensitive, arrays/order remain strict.
+- Causation: concurrent website/visibility changes are never reported as causal.
 
-These fields are persisted and runtime validated; no AI or ranking provider is involved. Existing schema-version-1 local records are accepted only through bounded legacy validation and normalized from their stored URL/analysis evidence. Missing current comparison and history contracts are deterministically recomputed through the current comparison and diff logic before identity-alignment and current-shape validation. Current comparison evidence, matrix values, benchmark flags, gap/advantage sets, missing values, and deltas are checked against an in-memory `compareAnalyses` recomputation. Current history observations, findings, competitor membership/order, rank changes, skipped reason, and correlation summary are likewise checked against `diffRuns` for the referenced prior run. Coordinated or structurally plausible fabrication is therefore rejected. Current-contract records remain unchanged, reads do not rewrite the store, and unsafe or ambiguous legacy data remains a store error rather than being silently accepted or overwritten.
+## Persistence and database status
 
-### Transparent delta logic
+- JSON is default for local/test, atomic, serialized, and strictly validated.
+- SQLite is opt-in with `STORAGE_ADAPTER=sqlite`; default path is `DATA_DIR/research.sqlite`.
+- Migration 001 creates projects/pages, runs/sites/pages, evidence, findings, comparisons, proposals, verifications, sources, AI interpretations, and reserved visibility observations.
+- SQLite uses strict tables, WAL, normal synchronization, foreign keys, busy timeout, and transactions.
+- No dependency was installed; Node's built-in `node:sqlite` is used.
+- Production shape is one service instance plus one persistent disk. Multi-instance managed DB is deferred.
+- Manual visibility observations currently remain in their own atomic JSON file.
 
-Scalar gaps/advantages return a structured `delta` containing target value, strongest relevant competitor benchmark, positive difference magnitude, threshold, and direction. Boolean gaps/advantages return target/benchmark booleans and an explicit present/absent direction. Set gaps preserve the observed missing values and evidence rather than forcing a numeric delta.
+## AI interpretation status
 
-| Scalar rule | Minimum difference | Direction treated as a target gap |
-|---|---:|---|
-| `GAP_HEADING_COVERAGE` | 2 | target lower |
-| `GAP_CONTENT_BREADTH` | 100 | target lower |
-| `GAP_QUESTION_COVERAGE` | 1 | target lower |
-| `GAP_DIRECT_ANSWERS` | 1 | target lower |
-| `GAP_INTERNAL_LINKS` | 3 | target lower |
-| `GAP_IMAGE_ALT` | 1 | target higher |
-| `GAP_HEADING_JUMPS` | 1 | target higher |
-| `GAP_EMPTY_HEADINGS` | 1 | target higher |
-| `GAP_REPEATED_HEADINGS` | 1 | target higher |
-| `GAP_JSONLD_ERRORS` | 1 | target higher |
-| `GAP_EMPTY_ANCHORS` | 1 | target higher |
-| `GAP_SERVICE_CLARITY` | 1 | target lower |
-| `GAP_LOCATION_CLARITY` | 1 | target lower |
+The deterministic application is complete without AI. Provider interfaces, environment configuration, prompt version, evidence-ID allowlist, schema/citation checks, invention/YMYL warnings, time/item/character/output-token bounds, provider/model/usage metadata, and regenerate-from-run API are implemented. No live adapter, secret, or AI dependency ships, so `/api/ai/status` reports disabled and requests return a truthful not-configured error.
 
-Boolean gap IDs are `GAP_INDEXABILITY`, `GAP_TITLE_MISSING`, `GAP_DESCRIPTION_MISSING`, `GAP_CANONICAL_MISMATCH`, `GAP_LANGUAGE_MISSING`, `GAP_VIEWPORT_MISSING`, `GAP_H1_STRUCTURE`, `GAP_FAQ_STRUCTURE`, `GAP_IDENTITY_SIGNALS`, `GAP_TRUST_SIGNALS`, `GAP_CONTACT_SIGNALS`, and `GAP_LOCATION_SIGNALS`.
+## Reports
 
-Set gap IDs are `GAP_COMPETITOR_ONLY_SCHEMA`, `GAP_COMPETITOR_ONLY_TOPICS`, and `GAP_COMPETITOR_ONLY_QUESTIONS`. Case-normalized comparisons prevent schema casing alone from being treated as a historical addition/removal. Recommendations say to validate relevance, write original content, and never fabricate claims, reviews, ratings, credentials, addresses, or locations.
+JSON, Markdown, and CSV include run identity/time, target/competitors, page inventory/eligibility, matrix/findings, topics/trust, proposals, history/verification, matching manual observations, research sources, methodology, and limitations. PDF is explicitly deferred.
 
-No metric is weighted into an overall score. Every result repeats that observed differences do not prove ranking, citation eligibility, or causation.
+## Files created
 
-## Run storage and history logic
+```text
+docs/deployment.md
+docs/research-sources.md
+docs/storage.md
+packages/ai/config.ts
+packages/ai/index.ts
+packages/ai/interpret.ts
+packages/ai/run-evidence.ts
+packages/ai/types.ts
+packages/analyzers/evaluate.ts
+packages/analyzers/index.ts
+packages/analyzers/types.ts
+packages/crawler/discovery.ts
+packages/crawler/site-crawl.ts
+packages/proposals/generate.ts
+packages/proposals/index.ts
+packages/proposals/types.ts
+packages/reports/index.ts
+packages/reports/report.ts
+packages/research/index.ts
+packages/research/sources.ts
+packages/storage/migrations/001_initial.sql
+packages/storage/sqlite-migrations.ts
+packages/storage/sqlite-run-store.ts
+packages/verification/index.ts
+packages/verification/types.ts
+packages/verification/verify.ts
+packages/visibility/index.ts
+packages/visibility/json-observation-store.ts
+packages/visibility/types.ts
+render.yaml
+services/analyzer/crawl.ts
+services/analyzer/server-config.ts
+tests/ai/interpret.test.ts
+tests/analyzer/server-config.test.ts
+tests/analyzers/evaluate.test.ts
+tests/crawler/site-crawl.test.ts
+tests/proposals/generate.test.ts
+tests/reports/report.test.ts
+tests/research/sources.test.ts
+tests/storage/sqlite-run-store.test.ts
+tests/verification/verify.test.ts
+tests/visibility/json-observation-store.test.ts
+```
 
-### Persistence
+## Files modified
 
-- Contract: `RunStore` in `packages/storage/types.ts`.
-- Adapter: `JsonRunStore` in `packages/storage/json-run-store.ts`.
-- Default file: `data/runs.json`; schema version `1`; application version `1.0.0`.
-- Every saved/read record is runtime validated, including URLs, findings/evidence, analyses, comparison, history, and manual rank range.
-- Corrupt JSON, structurally invalid records, unsupported schema, invalid new records, and I/O failure produce stable store errors; corrupt data is not silently overwritten.
-- Writes are serialized per adapter instance, written to a unique temporary file, renamed atomically, and cleaned after failure.
-- Newest-first ordering uses timestamp and append index, so equal timestamps select the later record.
+```text
+.env.example
+README.md
+apps/web/public/app.js
+apps/web/public/index.html
+apps/web/public/styles.css
+docs/api.md
+docs/architecture.md
+docs/build-journal.md
+docs/change-report.md
+docs/decision-log.md
+docs/demo-guide.md
+docs/file-map.md
+docs/methodology.md
+package-lock.json
+package.json
+packages/comparison/compare.ts
+packages/comparison/types.ts
+packages/crawler/errors.ts
+packages/crawler/fetch.ts
+packages/rules/evaluate.ts
+packages/rules/types.ts
+packages/schemas/api.ts
+packages/storage/json-run-store.ts
+packages/storage/types.ts
+services/analyzer/analyze.ts
+services/analyzer/app.ts
+services/analyzer/compare.ts
+services/analyzer/index.ts
+tests/analyzer/analyze.test.ts
+tests/analyzer/app.test.ts
+tests/analyzer/compare.test.ts
+tests/analyzer/frontend-history.test.ts
+tests/comparison/compare.test.ts
+tests/comparison/diff.test.ts
+tests/crawler/fetch.test.ts
+tests/rules/evaluate.test.ts
+tests/storage/json-run-store.test.ts
+```
 
-### Prior-run matching and changes
+No repository, README duplicate, dependency install, or generated production data was added. The existing stash was not changed.
 
-The newest saved run with the same normalized submitted target URL is the baseline. A redirected final URL does not change identity. Analyses are paired by normalized submitted URL rather than final URL or array position, so reordered competitors and redirect changes cannot cross-wire historical values.
+## Commits
 
-A different competitor set does not prevent target history. Added and removed competitor URLs are reported from normalized membership. Reordering is reported separately and considers only identities common to both runs: additions/removals alone do not set `orderChanged`, while `moves` records previous and current input positions when common competitors change relative order.
-
-Tracked technical fields: status, final URL, redirects, robots/sitemap availability and status, and indexability interpretation.
-
-Tracked metadata fields: title/length, description/length, canonical value/status, robots meta, language, and viewport.
-
-Tracked schema/structure/content fields: JSON-LD parse errors; case-insensitive schema additions/removals; H1 text/count, complete heading hierarchy/count, jumps, empty/repeated headings; word/sentence/question counts and question text; FAQ/breadcrumb/direct-answer evidence; and complete coverage dimensions.
-
-Tracked links/media fields: internal/external counts, unique internal/external destinations and counts, external domains/count, anchor summaries, empty anchors, image count, missing-alt count, and alt-issue evidence.
-
-Stable finding IDs are separated into new, resolved, and unchanged sets. Manual rank observations are separated into added, removed, and changed; `delta = current - previous`, so a negative value is movement toward position 1.
-
-Non-technical values are compared only when both snapshots for that site are usable. If either snapshot is ineligible, technical retrieval and eligibility changes remain available, non-technical differences are withheld, and differing finding IDs are placed in `indeterminateRuleIds` instead of being claimed as new or resolved. If either target snapshot is ineligible, rank comparison is skipped with the explicit eligibility reason and no content/rank correlation is attempted.
-
-Rank changes are compared only when normalized query labels match. If they differ, technical history remains available and the rank comparison is explicitly skipped. When both a site change and manual rank change occur, the correlation summary says only that they co-occurred and never attributes cause.
+```text
+e8d946a fix: resolve remaining comparison persistence validation
+4c570f3 feat: add bounded multi page crawl research projects
+90a3832 feat: add versioned deterministic analyzer library
+d2be132 docs: add versioned AI visibility research source registry
+746eb6c feat: compare up to five competitors
+bdba40b feat: expand evidence based site and competitor comparison
+1be9521 feat: build AI visibility research workspace
+5582372 feat: generate reviewable evidence backed implementation artifacts
+2eea926 feat: verify implementation changes across research runs
+1c10c07 feat: add optional evidence grounded AI interpretation
+be657c5 feat: add manual visibility observations and provider interfaces
+053c85c feat: add durable project and research run storage
+cf331df feat: export complete AI visibility research reports
+cf9ee20 feat: redesign interface for AI visibility research workflows
+d465e73 chore: prepare AI visibility lab for production deployment
+7411c71 fix: preserve proposal review label encoding
+8fb23bd fix: align research workspace copy and encoding
+585a5dc fix: normalize chained legacy run verification
+docs: complete AI visibility research platform handoff (this document's commit; final hash is reported by git log and in the completion response)
+```
 
 ## Verification results
 
-### Foundation checkpoint
-
-- Worktree: clean at `354df4c`.
-- Tests: 3 test files, 18 tests passed.
-- Strict TypeScript build: passed.
-
-### Prior MVP automated gate at `abe3b16`
-
-- `npm test`: 16 test files passed; 83 tests passed.
-- `npm run build`: passed with strict `tsc` and no emitted diagnostic.
-- `node --check apps/web/public/app.js`: passed.
-- `git diff --check`: passed.
-- `npm run dev`: service started successfully.
-- `GET http://127.0.0.1:3000/health`: returned `{"status":"ok"}`.
-- The temporary development service was stopped after verification.
-
-Test coverage spans URL normalization, address/DNS safety, redirect validation, timeout, body size, site resources, page/coverage evidence, rules, fixture before/after resolved and unchanged findings, multi-competitor benchmarking, structured deltas, query-aware rank history, rank additions/removals, schema casing, store validation/ordering/cleanup, service orchestration, strict API validation, error statuses, 100 KB payload rejection, and static-interface delivery.
-
-### Focused comparison hardening gate
-
-- `npm test`: 17 test files passed; 116 tests passed.
-- `npm run build`: passed with strict `tsc` and no emitted diagnostic.
-- `node --check apps/web/public/app.js`: passed.
-- `git diff --check`: passed.
-- Compiled-service smoke test on `127.0.0.1:3117`: `/health` returned `{"status":"ok"}`; the temporary service was stopped afterward.
-- Existing 3.4 MB `data/runs.json`: loaded read-only with 5 runs and remained byte-for-byte unchanged.
-- Added/expanded coverage includes 401/403/429/500/503, HTTP 200 access-denied/bot/CAPTCHA/security/soft-error responses, empty/near-empty/degraded/valid responses, legitimate challenge/error-language false positives, numeric-brand titles, mixed valid-invalid exclusion, unavailable targets, target-first ordering, evidence completeness, normalized-identity history, membership versus reordering, redirects, indeterminate findings, out-of-order parallel completion, legacy recomputation, semantic comparison/history storage validation, and API response fields.
-
-### Live browser verification
-
-A local compiled service was exercised through the browser interface:
-
-- `https://425clearaligners.com` single-site analysis completed and rendered metadata, retrieval, headings, content, structured data, links/media, findings, and raw evidence.
-- Target `https://425clearaligners.com` versus competitor `https://example.com` completed through the same analyzer and rendered the full matrix, gaps, advantages, coverage differences, and limitations.
-- A second matching comparison was saved; the prior run ID and categorized historical diff rendered.
-- Run history listed both records and the newest saved run reopened successfully.
-- Browser warning/error log: empty.
-
-The optional-slot rank-pairing edge case found in final code review was corrected afterward and is protected by the strict request/rank regression suite plus JavaScript syntax validation. The project does not yet include an automated DOM/browser test harness.
-
-### Focused hardening browser verification
-
-The compiled focused build was also exercised against saved mixed-eligibility run `6de313e5-380e-42c0-a816-a1511104e289`:
-
-- Four sites rendered in exact target-first submitted order: eligible target, ineligible HTTP 403 competitor, eligible competitor, then ineligible HTTP 405 competitor.
-- The result rendered `partial`, the exact incomplete message, 11 gaps, and 4 advantages.
-- Every inspected gap showed target evidence, a marked usable competitor benchmark, and explicit excluded placeholders for both ineligible competitors; raw retrieval details remained available for every site.
-- Difference, explanation, implementation, verification, priority, effort, limitation, and competitor membership/order history were visible.
-- Browser warning/error log: empty.
-- A live valid page titled `425 Clear Aligners...` exposed an overly broad numeric-error-title heuristic during verification. The title rule was narrowed and a numeric-brand regression now protects it.
-
-## Focused commits
-
-| Commit | Purpose | Gate before commit |
-|---|---|---|
-| `354df4c` | Verified deterministic foundation checkpoint. | 18 tests and build passed at review. |
-| `58d9885` | Harden shared crawler request policy and reproducibility. | Full then-current tests and build passed. |
-| `74958ac` | Add comparison, historical diff, rank contract, and JSON storage. | Full then-current tests and build passed. |
-| `8360a8e` | Add expanded evidence, coverage, rules, schemas, APIs, services, and verification fixtures. | 16 files / 79 tests and build passed. |
-| `8ceb833` | Add the minimal analysis/comparison/history interface. | 16 files / 79 tests and build passed. |
-| `00f35e3` | Close final audit gaps: slot/rank pairing, structured deltas, expanded history, validation accuracy, schema normalization, UI evidence, and regressions. | 16 files / 83 tests and build passed. |
-| `abe3b16` | Add README and complete architecture/API/methodology/decision/file-map/change handoff; append the existing journal. | Prior final test/build/document gate passed. |
-| focused comparison hardening commit (`fix: validate comparison eligibility and preserve site order`; hash in completion handoff) | Add eligibility admission, ordered identities, side-by-side evidence, identity-aware/indeterminate history, persistence/API/UI fields, regressions, and documentation updates. | 17 test files / 116 tests, strict build, browser syntax, diff, runtime, store-compatibility, and live-browser gates passed. |
-
-## All created files
-
-### Configuration, presentation, data marker, and docs
-
-- `.env.example` — environment-variable reference
-- `README.md` — single project overview/setup/capabilities/limits/roadmap
-- `apps/web/public/index.html` — workflow forms and accessible result regions
-- `apps/web/public/app.js` — API client, progress/errors, structured rendering, history interaction
-- `apps/web/public/styles.css` — responsive visual system
-- `data/.gitkeep` — tracks the generated-data directory only
-- `docs/architecture.md` — boundaries and runtime flow
-- `docs/api.md` — route, request, response, error, and limit reference
-- `docs/change-report.md` — this checkpoint-to-MVP handoff
-- `docs/decision-log.md` — architecture decisions and trade-offs
-- `docs/file-map.md` — exact ownership and future-edit locations
-- `docs/methodology.md` — evidence classes, heuristics, comparison/history method, unknowns
-
-### Verification fixtures
-
-- `fixtures/verification/original.html`
-- `fixtures/verification/corrected.html`
-
-### Packages and services
-
-- `packages/comparison/compare.ts`
-- `packages/comparison/diff.ts`
-- `packages/comparison/eligibility.ts`
-- `packages/comparison/types.ts`
-- `packages/crawler/errors.ts`
-- `packages/crawler/request.ts`
-- `packages/crawler/safety.ts`
-- `packages/entities/extract.ts`
-- `packages/entities/types.ts`
-- `packages/parser/links.ts`
-- `packages/parser/text.ts`
-- `packages/ranking/types.ts`
-- `packages/rules/evaluate.ts`
-- `packages/rules/index.ts`
-- `packages/rules/types.ts`
-- `packages/schemas/api.ts`
-- `packages/storage/json-run-store.ts`
-- `packages/storage/types.ts`
-- `services/analyzer/compare.ts`
-
-### Tests and helpers
-
-- `tests/analyzer/analyze.test.ts`
-- `tests/analyzer/compare.test.ts`
-- `tests/comparison/compare.test.ts`
-- `tests/comparison/diff.test.ts`
-- `tests/comparison/eligibility.test.ts`
-- `tests/crawler/fetch.test.ts`
-- `tests/crawler/resources.test.ts`
-- `tests/crawler/safety.test.ts`
-- `tests/entities/extract.test.ts`
-- `tests/helpers/analysis.ts`
-- `tests/parser/evidence.test.ts`
-- `tests/ranking/types.test.ts`
-- `tests/rules/evaluate.test.ts`
-- `tests/storage/json-run-store.test.ts`
-- `tests/verification/before-after.test.ts`
-
-## All modified foundation files
-
-- `docs/build-journal.md` — preserved the complete foundation journal and appended verified MVP milestones
-- `package.json` — restored locked dependency declarations, scripts, and Node engine
-- `package-lock.json` — synchronized manifest metadata
-- `packages/crawler/fetch.ts` — bounded shared request result and redirect/network evidence
-- `packages/crawler/resources.ts` — shared policy and resource evidence
-- `packages/parser/page.ts` — expanded deterministic page evidence
-- `services/analyzer/analyze.ts` — complete analysis orchestration and raw evidence
-- `services/analyzer/app.ts` — API routes, validation, static serving, and error boundary
-- `tests/analyzer/app.test.ts` — expanded API, error, payload, history, and static-interface verification
-- `tsconfig.json` — includes all package/service/test TypeScript in strict build
-
-The foundation `.gitignore`, `packages/crawler/url.ts`, `services/analyzer/index.ts`, `tests/crawler/url.test.ts`, `tests/parser/page.test.ts`, and `vitest.config.ts` remain present and were not modified.
-
-## Focused comparison hardening file inventory
-
-This is the exact 22-file focused-fix scope. The exact commit hash is reported in the completion handoff:
-
-### Created
-
-- `packages/comparison/eligibility.ts`
-- `tests/comparison/eligibility.test.ts`
-
-### Modified production and presentation
-
-- `apps/web/public/app.js`
-- `apps/web/public/index.html`
-- `apps/web/public/styles.css`
-- `packages/comparison/compare.ts`
-- `packages/comparison/diff.ts`
-- `packages/comparison/types.ts`
-- `packages/storage/json-run-store.ts`
-- `packages/storage/types.ts`
-- `services/analyzer/compare.ts`
-
-### Modified tests/helpers
-
-- `tests/analyzer/app.test.ts`
-- `tests/analyzer/compare.test.ts`
-- `tests/comparison/compare.test.ts`
-- `tests/comparison/diff.test.ts`
-- `tests/helpers/analysis.ts`
-- `tests/storage/json-run-store.test.ts`
-
-### Modified documentation
-
-- `docs/api.md`
-- `docs/build-journal.md`
-- `docs/change-report.md`
-- `docs/file-map.md`
-- `docs/methodology.md`
-
-## Complete, partial, and deferred inventory
-
-### Complete in this MVP
-
-- public URL normalization and bounded same-policy acquisition;
-- material SSRF controls and redirect-hop validation;
-- expanded direct evidence extraction and source provenance;
-- stable deterministic findings with executable verification guidance;
-- equal-path one-to-three competitor comparison;
-- raw matrix, eligibility-filtered benchmarks, structured deltas, visible side-by-side gap and advantage evidence, and explicit limitations;
-- target-first normalized submitted identities across parallel analysis, response, persistence, and history;
-- separate competitor membership/reordering plus indeterminate non-technical history for unusable snapshots;
-- optional manual rank observations and future provider interface;
-- validated atomic local run persistence and query-aware history;
-- safe API, local browser interface, documentation, and fixtures, verified by the focused 17-test-file/116-test gate;
-- no AI API and no aggregate visibility score.
-
-### Partial by explicit design
-
-- The crawler analyzes one submitted page per site plus two root resources, not an entire site.
-- Visible text is a deterministic static-source approximation; it cannot fully model CSS/layout visibility, JavaScript rendering, shadow DOM, or client hydration.
-- Relative URL resolution does not currently apply an HTML `<base>` element.
-- Any bounded response body can reach the HTML parser; upstream `Content-Type` is not yet gated.
-- Robots/sitemap availability means a 2xx response at the conventional root path; content is not validated and robots-declared sitemap locations are not discovered.
-- Internal links use exact hostname equality; apex, `www`, and subdomains are distinct.
-- Indexability covers response success plus parsed meta directives, not `X-Robots-Tag`, full robots policy, authentication, or actual external-index state.
-- Coverage is conservative lexical/structured evidence, not semantic interpretation. Phone-like text is explicitly marked heuristic.
-- Eligibility uses bounded status/title/visible-text and normal-page-evidence heuristics. Novel challenge templates can evade known patterns, and legitimate very short pages may be degraded or excluded until raw evidence is reviewed.
-- A degraded page remains eligible for benchmarking with an explicit caution; this is not a content-quality or relevance certification.
-- Ineligible snapshots intentionally suppress non-technical historical differences and finding-resolution claims. A later usable snapshot or manual review is required to establish what changed.
-- Comparison uses transparent raw counts. Missing-alt direction is a count rather than a ratio, so image volume must be reviewed alongside it.
-- Ranks are optional, manual, and unverified. Historical correlation remains observational.
-- History tracks the explicit inventory above, not every raw response byte or social field.
-- Browser behavior was verified manually; there is no automated DOM/browser test suite.
-- JSON persistence is appropriate for a local single-process demonstration only.
-
-### Deferred
-
-- JavaScript-rendering browser crawler and robots-aware multi-page/site crawl budgets;
-- response content-type enforcement, `<base>` support, robots parsing, and sitemap discovery/validation;
-- connection pinning plus deployment-level egress rules to close DNS-rebinding TOCTOU;
-- authentication, authorization, rate limits, queues, and production hosting controls;
-- SQLite/PostgreSQL adapter, transaction-safe prior lookup/save, migrations, pagination, retention, recovery, and size limits;
-- verified automatic rank/SERP provider and owned-site Search Console integration;
-- first-party analytics, backlink/off-page sources, conversions, and revenue;
-- optional AI interpretation layer after deterministic maturity;
-- any claim of ranking/citation causation or a proprietary visibility score.
-
-## Security, operational, and data limitations
-
-- DNS answers are validated immediately before native fetch, but native fetch resolves again; a residual DNS-rebinding time-of-check/time-of-use window remains. Production needs connection pinning and egress controls.
-- The API has no auth or rate limit and must remain on a trusted local interface unless those controls are added.
-- Per-instance store serialization does not coordinate multiple processes/adapters. Prior lookup and save are not one transaction, so concurrent comparisons can share a prior baseline.
-- There is no run pagination, retention, migration, or production recovery workflow.
-- Saved runs contain complete public-page evidence, including visible text. Although sourced publicly, generated history should still be treated as local application data.
-- Live public pages can change between runs; results describe the fetched response at `fetchedAt` only.
-
-## Exact future-edit locations
-
-- Network/SSRF/redirect/timeout policy: `packages/crawler/request.ts`, `safety.ts`, `fetch.ts`, `errors.ts`
-- Resource parsing/discovery: `packages/crawler/resources.ts`
-- New observed page fields: `packages/parser/page.ts`; text rules in `text.ts`; link/base-host behavior in `links.ts`
-- Coverage heuristics: `packages/entities/extract.ts` plus `types.ts`
-- Finding contracts/triggers: `packages/rules/types.ts` and `evaluate.ts`
-- Comparison eligibility patterns/thresholds/reasons and exact incomplete message: `packages/comparison/eligibility.ts`
-- Metric definitions/thresholds/deltas, benchmark exclusions, conclusion status, and side-by-side evidence: `packages/comparison/compare.ts` and `types.ts`
-- Stable target-first submitted identities and parallel analyzer output validation: `services/analyzer/compare.ts`
-- Historical field inventory, normalized submitted identity, membership/reorder, indeterminate findings, and query/rank correlation: `packages/comparison/diff.ts`
-- Rank provider: implement `RankObservationProvider` from `packages/ranking/types.ts` in a new adapter
-- Stored identity/eligibility/history validation or compatibility: `packages/storage/types.ts` and `packages/storage/json-run-store.ts`; for replacement, implement `RunStore` and inject through `services/analyzer/app.ts`/`compare.ts`
-- Request contract/routes: `packages/schemas/api.ts` and `services/analyzer/app.ts`
-- Single-site orchestration/raw evidence: `services/analyzer/analyze.ts`
-- Comparison/save orchestration: `services/analyzer/compare.ts`
-- Browser eligibility/raw retrieval/side-by-side evidence/history rendering: `apps/web/public/app.js` and `styles.css`; form/section structure in `index.html`
-- Future AI interpretation: create `packages/interpretation/` after deterministic outputs, call it only after analysis/comparison, preserve evidence unchanged, and expose it as a separately labeled opt-in response. Exact contract/test/doc guidance is in `docs/file-map.md`.
-
-`docs/file-map.md` is the maintained ownership map and should be updated whenever a boundary moves.
-
----
-
-## Rooz prototype stabilization (2026-07-15)
-
-### Comparison persistence root cause and correction
-
-`POST /api/compare` completed its analysis but was rejected while saving with `INVALID_RECORD`. The saved-record validator recomputed history from schema-normalized data while the service had created history from the in-memory data. Nested semantic objects with an equivalent value but a different property insertion order compared unequal through `JSON.stringify`, which made the recomputed history diverge.
-
-`packages/comparison/diff.ts` now uses stable JSON semantics for observed-field equality: object keys are sorted recursively, `undefined` object properties are omitted as JSON does, and array order remains meaningful. `packages/storage/json-run-store.ts` preserves strict semantic validation and reports the divergent top-level history section. `services/analyzer/app.ts` now distinguishes an analysis/comparison success that could not be saved from a history-load failure: “The comparison completed, but the run could not be saved.” Deterministic orchestration regression coverage exercises the target/competitor reproduction shape, clean/tracked competitor identities, saving, listing, reopening, and second-run history.
-
-### Visible evidence normalization
-
-`packages/parser/text.ts` decodes common HTML/numeric entities, strips encoded markup, enforces a 220-character/30-word readable-question boundary, requires an interrogative/auxiliary question structure, and deduplicates normalized values. `packages/parser/page.ts` applies it consistently to headings, visible text, and direct answers. `packages/entities/extract.ts` rejects form placeholders such as `YOUR_STREET_ADDRESS` and `YOUR_ZIP` plus location sentence fragments such as `Bellevue You` and `Sammamish. We`. Raw page evidence, source URL, selector, and snippets remain available through existing analysis and comparison evidence structures.
-
-### Demo vertical slice
-
-The comparison screen now renders an **Implementation workspace** for the first evidence-backed target gap. It includes current evidence, direction, verification checklist, an editable HTML artifact, and the mandatory review label: **Proposal — requires factual and medical review before publication.** It never modifies a live site.
-
-The same screen renders **Fixture verification** from the existing deterministic `fixtures/verification/original.html` and `corrected.html` proof. Stable resolved IDs are `CANONICAL_MISMATCH`, `HEADING_MULTIPLE_H1`, `HEADING_LEVEL_JUMP`, `HEADING_EMPTY`, `JSONLD_INVALID`, and `IMAGE_ALT_MISSING`; `INTERNAL_LINKS_LOW` remains unchanged; no new fixture finding is asserted. `docs/demo-guide.md` documents the exact demo sequence.
-
-### Commits and verification
-
-| Commit | Scope |
-|---|---|
-| `ba9df8b` | Resolve comparison run validation failure. |
-| `2d1212b` | Normalize visible question and topic evidence. |
-| `4a005d2` | Complete evidence implementation verification demo. |
-
-Before each commit, `npm test` and `npm run build` passed. The final feature gate passed 18 test files / 122 tests, strict TypeScript compilation, `node --check apps/web/public/app.js`, and `git diff --check`.
-
-### Exact future edit locations
-
-- History equality and diff logic: `packages/comparison/diff.ts`.
-- Persisted semantic validation: `packages/storage/json-run-store.ts`.
-- Comparison persistence error wording: `services/analyzer/app.ts`.
-- Question cleanup: `packages/parser/text.ts` and `packages/parser/page.ts`.
-- Placeholder/topic cleanup: `packages/entities/extract.ts`.
-- Proposal, fixture verification, history, and roadmap presentation: `apps/web/public/app.js`, `index.html`, and `styles.css`.
-- Fixture proof: `fixtures/verification/` and `tests/verification/before-after.test.ts`.
+Latest completed source gate before the documentation-only commit:
+
+```text
+npm test                              PASS — 28 files, 166 tests
+npm run build                         PASS — strict TypeScript
+node --check apps/web/public/app.js   PASS
+git diff --check                      PASS
+```
+
+Read-only compatibility and compiled API smoke:
+
+```text
+Untouched data/runs.json              PASS — 13 runs loaded from 11.8 MB
+GET /health                           PASS — 200
+GET /api/runs                         PASS — 13 summaries
+GET /api/runs/latest                  PASS — matching newest run
+GET /api/runs/:id                     PASS — reopened newest run with history
+GET /api/research-sources             PASS — registry 1.0.0, 10 sources
+JSON / Markdown / CSV exports         PASS — 200, non-empty
+GET /api/ai/status                    PASS — disabled, deterministic available
+GET /api/visibility-providers         PASS — manual enabled, zero providers
+```
+
+Browser verification against compiled port 3001 passed: service ready; Projects, Research Sources, Roadmap, and History rendered; all 13 runs listed; the newest saved run reopened; the exact proposal review and non-causation labels appeared; three export links appeared; console warnings/errors were empty. At a 390×844 viewport the document and project panel did not overflow; the tab strip scrolls horizontally by design.
+
+Final post-documentation test/build, push status, and exact clean Git status are completed after this report is staged. The completion response reports those results without claiming an external deployment.
+
+## Deployment status and commands
+
+Render-compatible configuration is committed but an external Render deployment was not created from this workspace. The blueprint uses Node 24.18.0 LTS, `npm ci && npm run build`, `npm start`, `/health`, SQLite, `/var/data`, a one-GB disk, and a 30-second shutdown allowance.
+
+Local:
+
+```powershell
+npm install
+npm test
+npm run build
+npm run dev
+```
+
+Compiled durable mode:
+
+```powershell
+$env:STORAGE_ADAPTER='sqlite'
+$env:DATA_DIR='./data'
+npm run build
+npm start
+```
+
+## Deferred items and known limitations
+
+- JavaScript rendering, authenticated crawls, CSS/rendered visibility, full search-engine robots behavior.
+- Durable background jobs, progress streaming, retries/cancellation, and crawls above the enforced bound.
+- Authentication, authorization, tenant isolation, quotas, audit retention, and abuse controls.
+- Multi-instance managed PostgreSQL/object storage/backups/failover.
+- Approved search/rank/citation/Search Console/analytics/backlink providers.
+- Bundled live AI provider, secret-manager integration, and enforceable dollar budget (token/input/time bounds and returned cost metadata exist).
+- PDF export.
+- Consolidating manual observations into SQLite.
+- Native-fetch DNS pinning; network egress control remains advisable.
+- Browser/static analysis does not prove index state, ranking, citation, traffic, conversion, or causation.
+
+## Exact future edit locations
+
+- Crawl limits/robots/queue/background transition: `packages/crawler/site-crawl.ts`, `services/analyzer/crawl.ts`.
+- Fetch/SSRF/transport: `packages/crawler/request.ts`, `safety.ts`, `fetch.ts`, `discovery.ts`.
+- Extraction normalization: `packages/parser/page.ts`, `text.ts`, `links.ts`, `packages/entities/`.
+- Stable finding rules: `packages/rules/evaluate.ts` and `types.ts`.
+- Analyzer IDs/versions: `packages/analyzers/evaluate.ts`; source mapping: `packages/research/sources.ts`.
+- Eligibility/metrics/thresholds: `packages/comparison/eligibility.ts`, `compare.ts`, `types.ts`.
+- History fields/semantics: `packages/comparison/diff.ts`; verification: `packages/verification/verify.ts`.
+- Proposal templates/review label: `packages/proposals/generate.ts`, `types.ts`.
+- Public API schemas/routes/errors: `packages/schemas/api.ts`, `services/analyzer/app.ts`.
+- Strict record schema/alignment/diagnostics: `packages/storage/json-run-store.ts`.
+- SQLite schema/transactions: `packages/storage/sqlite-migrations.ts`, `migrations/`, `sqlite-run-store.ts`.
+- AI provider: implement `packages/ai/types.ts`, wire explicitly in `services/analyzer/app.ts`.
+- Visibility provider/unified storage: `packages/visibility/types.ts`, `json-observation-store.ts`, storage migrations.
+- Report formats: `packages/reports/report.ts`.
+- Browser structure/behavior/styles: `apps/web/public/index.html`, `app.js`, `styles.css`.
+- Environment/lifecycle/deployment: `services/analyzer/server-config.ts`, `index.ts`, `.env.example`, `render.yaml`.
+
+## Final status contract
+
+The completed code is deterministic-first, evidence-linked, strict, offline-testable, and deployable as one durable instance. Any future capability must preserve raw evidence, stable identity/versioning, explicit limitations, truthful provider state, and the non-causation boundary.

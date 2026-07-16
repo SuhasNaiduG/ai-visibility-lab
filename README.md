@@ -1,47 +1,41 @@
-# AI Visibility Engineering Lab
+# AI Visibility Research Lab
 
-A deterministic-first platform for collecting public website evidence, applying explainable rules, comparing a target page with competitors, and monitoring changes across saved runs.
-
-The project follows:
+AI Visibility Research Lab is a deterministic-first platform for inspecting public website evidence, comparing one target with up to five competitors, producing reviewable implementation proposals, and verifying observable changes across saved runs.
 
 ```text
-Observe → Measure → Analyze → Implement → Verify → Monitor
+Observe -> Measure -> Analyze -> Compare -> Propose -> Verify -> Monitor
 ```
 
-It does not call an AI API, predict rankings, simulate a proprietary search system, or produce a synthetic “AI visibility score.” Results are raw observations, labeled editorial heuristics, structured evidence, and transparent deltas.
+The lab does not generate a synthetic visibility score, predict rankings, scrape result pages, or claim that a website signal is a confirmed ranking factor. Optional AI interpretation is downstream of preserved evidence and is disabled unless a reviewed provider adapter is supplied.
 
-## Current capabilities
+## Principles
 
-- Normalizes public HTTP/HTTPS URLs and rejects local, private, link-local, reserved, and unsafe redirect targets.
-- Fetches bounded HTML with a timeout, clear user agent, manual redirects, response timing, and redirect evidence.
-- Checks public `robots.txt` and `sitemap.xml` resources through the same network policy.
-- Extracts metadata, canonical/indexability signals, language, viewport, headings, normalized visible text, questions, FAQ/direct-answer indicators, JSON-LD and parse errors, schema types, social metadata, links, anchors, images, and alt-text issues.
-- Preserves inspectable entity, service, location, trust, contact, and content-section term evidence.
-- Applies stable deterministic rules. Every finding includes evidence, impact context, exact implementation direction, expected outcome, verification method, priority, and effort.
-- Compares one target with one to three competitors through the same analyzer path, with raw matrix values and evidence-backed target gaps/advantages.
-- Accepts optional manual rank observations and labels them as manual; it does not collect rankings automatically.
-- Saves comparison runs in an atomic JSON-file store and diffs later matching runs without claiming causation.
-- Serves a minimal browser interface for analysis, comparison, normalized evidence, reviewed implementation proposals, fixture verification, limitations, and run history.
+- Every finding has a stable rule ID/version, source URL, observed value, limitation, and verification method.
+- All sites travel through the same fetch, parse, rule, and comparison path.
+- Missing page evidence does not prove the business lacks the underlying fact.
+- Competitor differences are research prompts, never instructions to copy or fabricate.
+- Medical, professional, credential, testimonial, price, insurance, and other YMYL claims require factual and qualified review.
+- Website changes and visibility observations can be concurrent without being causal.
 
-## Architecture
+## What works now
 
-```text
-Browser interface
-  → Express API and orchestration
-    → URL/network policy and crawler
-    → HTML parser and coverage extraction
-    → deterministic rule engine
-    → transparent comparison
-    → JSON run storage and historical diff
-  → structured JSON response
-```
+- Safe single-page acquisition with URL normalization, SSRF controls, bounded redirects, timeout/body/content-type limits, and explicit resource evidence.
+- Same-origin breadth-first crawl projects with configurable page/depth/delay bounds, tracking-parameter removal, canonical duplicate prevention, `robots.txt` awareness, sitemap discovery, deterministic ordering, and partial results.
+- Normalized page extraction for metadata, headings, indexability, visible questions/answers, JSON-LD, links, images, entity/service/location/trust/contact evidence, and raw parse errors.
+- Versioned analyzer library covering technical, content/answerability, entity, trust/YMYL, and retrieval-support observations.
+- One target plus one-to-five competitor comparison with 43 inspectable matrix metrics, per-site eligibility, target/competitor advantages, shared gaps, transparent thresholds, and no aggregate score.
+- Evidence-linked implementation proposals for metadata, canonicals, headings, FAQ/schema, provider/reviewer/reference/risk/contact blocks, links, page briefs, tables, and image-alt guidance.
+- Strict comparison persistence, reopen/latest/list APIs, semantic history, analyzer-aware verification, evidence diffs, and proposal-resolution links.
+- Manual rank/citation observations with query, engine, location, device, date, reference, and notes. No automated provider is presented as active.
+- Complete JSON, Markdown, and CSV reports.
+- JSON local storage and transactional SQLite durable storage with migrations.
+- Optional, schema-validated AI interpretation interfaces with evidence citations, prompt versioning, bounded input/output, timeout handling, and no bundled live provider.
+- Accessible responsive research workspace: Projects, Single Analysis, Comparison, History, Visibility Observations, Research Sources, and Roadmap.
+- Render deployment blueprint, health check, fail-fast environment validation, structured safe logs, and graceful shutdown.
 
-The browser never contains analysis rules. Fetching, parsing, rules, comparison, and persistence are separate typed modules. See [`docs/architecture.md`](docs/architecture.md) and [`docs/file-map.md`](docs/file-map.md).
+## Quick start
 
-## Requirements and setup
-
-- Node.js 20 or newer
-- npm
+Requirements: Node.js 22.13 or newer (Node.js 24 LTS is recommended) and npm.
 
 ```powershell
 npm install
@@ -50,115 +44,102 @@ npm run build
 npm run dev
 ```
 
-Open `http://localhost:3000`. Configuration defaults are documented in `.env.example`; no secrets are required.
+Open `http://localhost:3000`.
 
-Production-style local start after building:
+Production-style local start:
 
 ```powershell
+$env:STORAGE_ADAPTER='sqlite'
+$env:DATA_DIR='./data'
 npm run build
 npm start
 ```
 
+The service writes generated data under `data/`, which is ignored by Git. Copy `.env.example` as a reference; the application does not load dotenv files itself, so set variables in the process or deployment platform.
+
+## Workflow
+
+1. Open **Projects** and run a bounded same-origin crawl. Inspect every analyzed, blocked, skipped, and failed page.
+2. Open **Single Analysis** for a page-level evidence and rule review.
+3. Open **Comparison**, submit a target and one-to-five competitors, then inspect eligibility before interpreting gaps.
+4. Review the matrix, evidence, target gaps/advantages, shared gaps, and proposed artifacts.
+5. Reopen the saved run from **History** or export it as JSON, Markdown, or CSV.
+6. After publishing reviewed changes, run the same normalized target again to generate history and verification.
+7. Record manual visibility observations separately. Treat concurrent movement as non-causal.
+8. Optionally request AI interpretation only after configuring a reviewed adapter; deterministic findings remain authoritative.
+
+See [the demo guide](docs/demo-guide.md) for an exact walkthrough.
+
+## Architecture
+
+```text
+Browser workspace
+  -> Express routes + strict request schemas
+    -> safe single-page acquisition / bounded site crawl
+      -> parser + normalized evidence
+        -> deterministic rules + analyzer library
+          -> eligibility + comparison + proposals
+            -> JSON or SQLite run store
+              -> history + verification + reports
+                -> optional evidence-grounded interpretation
+```
+
+The browser contains presentation logic only. Fetch policy, parsing, rules, analyzers, comparison, proposals, verification, reports, and persistence are separate typed modules. See [architecture](docs/architecture.md) and the [file map](docs/file-map.md).
+
 ## Commands
 
 | Command | Purpose |
-|---|---|
-| `npm run dev` | Start the local service with TypeScript watch mode |
-| `npm test` | Run the deterministic Vitest suite |
-| `npm run build` | Compile all strict TypeScript |
-| `npm start` | Run compiled output from `dist/` |
-| `npm run test:watch` | Rerun tests while editing |
+| --- | --- |
+| `npm run dev` | Start the TypeScript service in watch mode |
+| `npm test` | Run all deterministic unit/integration/API/storage/browser-source tests |
+| `npm run build` | Compile strict TypeScript into `dist/` |
+| `npm start` | Run `dist/services/analyzer/index.js` |
+| `npm run test:watch` | Run Vitest interactively |
+| `node --check apps/web/public/app.js` | Check browser JavaScript syntax |
 
-## API examples
-
-Health:
-
-```http
-GET /health
-```
-
-Single-page evidence and findings:
+## Main API
 
 ```http
+GET  /health
 POST /api/analyze
-Content-Type: application/json
-
-{
-  "url": "https://425clearaligners.com"
-}
-```
-
-Comparison and saved history:
-
-```http
+POST /api/projects/crawl
 POST /api/compare
-Content-Type: application/json
-
-{
-  "targetUrl": "https://425clearaligners.com",
-  "competitorUrls": ["https://competitor.example"],
-  "queryLabel": "clear aligners Bellevue",
-  "rankObservations": {
-    "https://425clearaligners.com": 8
-  }
-}
+GET  /api/runs
+GET  /api/runs/latest?targetUrl=...
+GET  /api/runs/:id
+GET  /api/runs/:id/export?format=json|markdown|csv
+GET  /api/research-sources
+GET  /api/ai/status
+POST /api/runs/:id/interpretations
+GET  /api/visibility-providers
+POST /api/visibility-observations
+GET  /api/visibility-observations?targetUrl=...
 ```
 
-Run history:
+All API failures use `{ "error": { "code", "message", "details" } }`. Full contracts are in [API documentation](docs/api.md).
 
-```http
-GET /api/runs
-GET /api/runs/:id
-GET /api/runs/latest?targetUrl=https%3A%2F%2F425clearaligners.com
-```
+## Method and sources
 
-All API errors use a stable envelope:
+Direct observations are kept separate from internal heuristics, deterministic inferences, proposals, optional AI interpretation, and manual visibility observations. The research registry maps analyzer IDs to official guidance, standards, schema vocabulary, accessibility guidance, or explicitly labeled internal heuristics. See [methodology](docs/methodology.md) and [research sources](docs/research-sources.md).
 
-```json
-{
-  "error": {
-    "code": "INVALID_REQUEST",
-    "message": "Request validation failed",
-    "details": {}
-  }
-}
-```
+## Storage and deployment
 
-See [`docs/api.md`](docs/api.md) for contracts and status behavior.
+- `STORAGE_ADAPTER=json` is the local/test default. The JSON adapter validates records and atomically replaces its file.
+- `STORAGE_ADAPTER=sqlite` uses the built-in `node:sqlite` API, strict tables, migrations, WAL, foreign keys, and transactions. It is the supplied single-instance production option.
+- The Render blueprint mounts `/var/data`; only one web instance should use the SQLite database.
+- Manual visibility observations currently use their own atomic JSON store even when comparison runs use SQLite.
 
-## Evidence and limitations
+See [storage](docs/storage.md) and [deployment](docs/deployment.md).
 
-The application can directly observe only public responses and page content at crawl time. It cannot know private traffic, conversions, revenue, Search Console data, backlinks, true historical rankings, or proprietary search/AI factors. Manual positions are user-supplied observations. A change occurring near a rank observation is correlation only, never proof of causation.
+## Limits and roadmap
 
-Metadata-length, content-breadth, and low-link thresholds are clearly labeled editorial heuristics rather than ranking laws. Competitor-only topics and schema are research prompts, not instructions to copy wording or fabricate content. Structured-data guidance must match truthful visible content.
+- Static HTML only: no browser rendering, JavaScript execution, authenticated crawl, or CSS visibility model.
+- Bounded synchronous crawls only; long-running/background jobs are planned before any higher page limit.
+- No authentication, tenant isolation, quotas, audit retention, or multi-instance database.
+- No Search Console, analytics, backlink, automated rank, or citation provider integrations.
+- No bundled AI adapter. Enabling environment variables alone does not activate AI.
+- No PDF export; JSON, Markdown, and CSV are verified.
+- No causal or ranking guarantee and no proprietary-system measurement.
+- SQLite's Node API remains release-candidate stability; managed PostgreSQL is the future multi-instance path.
 
-The JSON store is suitable for a local single-process MVP, not multi-instance production deployment. The SSRF policy validates DNS immediately before native fetch, but a lower-level transport would be needed to eliminate the residual DNS-rebinding time-of-check/time-of-use window.
-
-The service has no authentication or rate limiting and is intended for a trusted local interface. It parses bounded static response bodies without a content-type gate or JavaScript rendering, checks only the conventional root resource URLs, resolves relative URLs without applying an HTML `base` element, and treats exact hostnames as the internal-link boundary. These limits are fully inventoried in [`docs/change-report.md`](docs/change-report.md).
-
-## Data and configuration
-
-Generated history is written under `data/` and ignored by Git. Only `data/.gitkeep` is tracked. `.env` files and secrets are ignored. No AI, SERP, analytics, or database credential is needed.
-
-## Roadmap
-
-### Working now
-
-- Single-page analysis, competitor comparison, evidence-backed findings, a factual-review implementation proposal, deterministic before/after fixture verification, and saved run history.
-
-### Future modules
-
-All items below are **Planned — not enabled in this prototype.**
-
-- Multi-Page Crawling: inspect a bounded set of pages.
-- AI Interpretation: optional interpretation over preserved deterministic evidence.
-- Automated Rank Tracking: verified external observations.
-- PDF Reports: export an evidence report.
-- Database Storage: durable multi-user persistence.
-- Advanced E-E-A-T: additional transparent evidence checks.
-- Advanced Analyzer Library: more deterministic analyzers.
-- Interface Redesign: broader presentation work.
-
-## Screenshots
-
-The local interface supports screenshots of single-site analysis, comparison, history, and evidence-backed findings. Screenshots are intentionally not committed because results depend on live public pages and generated local run data.
+The exact implementation inventory, verification results, commits, deferred items, and future edit locations are in [the change report](docs/change-report.md).

@@ -1,137 +1,112 @@
-# File Map and Future-Edit Guide
+# File Map
 
-This map identifies the exact ownership boundary for each feature. Keep deterministic acquisition, interpretation, comparison, and presentation separate when extending the lab.
+## Entrypoints and configuration
 
-## Runtime entry points
+| Location | Responsibility | Future edits |
+| --- | --- | --- |
+| `package.json` | Node engine and dev/build/test/start scripts | Add only reviewed dependencies/scripts |
+| `.env.example` | Complete non-secret environment reference | Add validated variables here and in config |
+| `render.yaml` | Render build/start/health/disk/runtime configuration | Change deployment size/runtime/disk |
+| `services/analyzer/index.ts` | Production listener, structured logs, graceful shutdown | Process lifecycle only |
+| `services/analyzer/server-config.ts` | Fail-fast server/request/storage environment validation | Add operational variables and bounds |
 
-| Location | Responsibility | Edit here when… |
-|---|---|---|
-| `services/analyzer/index.ts` | Reads `PORT` and starts Express. | Changing process startup or adding graceful shutdown. |
-| `services/analyzer/app.ts` | HTTP routes, strict request validation, static hosting, dependency injection, and safe error mapping. | Adding an endpoint, changing status behavior, or composing a new service. |
-| `apps/web/public/index.html` | Accessible forms, workflow tabs, and result containers. | Adding a user input or a new result section. |
-| `apps/web/public/app.js` | API calls, progress/error states, structured result rendering, reviewed proposal template, and fixture-verification presentation. | Changing browser interaction or rendering a new API field. |
-| `apps/web/public/styles.css` | Responsive visual presentation. | Changing layout, typography, tables, cards, or mobile behavior. |
+## HTTP and orchestration
 
-## Deterministic analysis path
+| Location | Responsibility | Future edits |
+| --- | --- | --- |
+| `services/analyzer/app.ts` | Routes, validation, dependency injection, static UI, safe error mapping | Add endpoints/adapters |
+| `services/analyzer/analyze.ts` | Compose fetch, resources, parser, rules, analyzers, evidence | Single-page pipeline |
+| `services/analyzer/crawl.ts` | Resource/sitemap discovery plus bounded project crawl | Project orchestration |
+| `services/analyzer/compare.ts` | Equal-path analyses, comparison, baseline, history, verification, save | Comparison workflow |
+| `packages/schemas/api.ts` | Strict public request/query schemas | Public input contracts |
 
-| Location | Responsibility | Edit here when… |
-|---|---|---|
-| `packages/crawler/url.ts` | Basic URL normalization and supported-scheme checks. | Changing normalization behavior. Preserve its existing regression tests. |
-| `packages/crawler/safety.ts` | Literal-IP and DNS-answer public-network policy. | Supporting a new address family/classification or strengthening SSRF defense. |
-| `packages/crawler/request.ts` | Shared DNS check, timeout, user agent, redirect loop, and request evidence. | Changing outbound policy or replacing native fetch with a connection-pinned transport. |
-| `packages/crawler/fetch.ts` | Bounded HTML body streaming and crawl result projection. | Changing the HTML byte limit, body decoding, or upstream response acceptance. |
-| `packages/crawler/resources.ts` | Root `robots.txt` and conventional `sitemap.xml` checks. | Adding content validation, robots-declared sitemap discovery, or resource-specific parsing. |
-| `packages/crawler/errors.ts` | Stable crawler error codes and HTTP mappings. | Adding a safe, externally visible acquisition failure type. |
-| `packages/parser/page.ts` | Coordinates metadata, canonical, robots, headings, JSON-LD, media, social, and page-level extraction. | Adding a directly observed page field. Extend `ParsedPage` and its tests together. |
-| `packages/parser/text.ts` | Visible-text normalization, sentence/word/question helpers and readable-question filtering. | Changing deterministic text visibility or counting rules. |
-| `packages/parser/links.ts` | Link resolution, exact-host internal/external classification, destinations, domains, and anchor summaries. | Changing link classification or link evidence. |
-| `packages/entities/extract.ts` | Inspectable entity/service/location/trust/contact/content-section patterns and sources, including placeholder/fragment rejection. | Adding a transparent retrieval/coverage heuristic. Do not hide semantic weights here. |
-| `packages/entities/types.ts` | Coverage input, signal, source, and dimension contracts. | Adding a coverage dimension or provenance field. |
-| `services/analyzer/analyze.ts` | One-page orchestration: fetch, parse, resources, coverage/rules, and raw evidence. | Adding an analysis stage or changing environment option wiring. |
+## Acquisition and parsing
 
-## Findings and rules
+| Location | Responsibility | Future edits |
+| --- | --- | --- |
+| `packages/crawler/url.ts` | HTTP(S) normalization | URL identity policy |
+| `packages/crawler/safety.ts` | Literal/DNS public-address enforcement | SSRF classifications |
+| `packages/crawler/request.ts` | Redirect/time/network policy | Transport policy |
+| `packages/crawler/fetch.ts` | Bounded HTML and content-type acquisition | Body/media handling |
+| `packages/crawler/resources.ts` | `robots.txt`/sitemap availability evidence | Resource checks |
+| `packages/crawler/discovery.ts` | Root resources, robots body, sitemap URL discovery | Discovery policy |
+| `packages/crawler/site-crawl.ts` | Same-origin BFS, pacing, robots rules, statuses, aggregation | Crawl limits/queue/jobs |
+| `packages/parser/page.ts` | DOM extraction coordinator | Add page fields |
+| `packages/parser/text.ts` | Visible text, headings, questions, answers, normalization | Evidence noise rules |
+| `packages/parser/links.ts` | Link/anchor/internal-external extraction | Link semantics |
+| `packages/entities/*` | Entity/service/location/trust/contact coverage signals | Lexical/structured dictionaries |
 
-| Location | Responsibility | Edit here when… |
-|---|---|---|
-| `packages/rules/types.ts` | Evidence, finding, classification, priority, effort, and analysis-input contracts. | Changing the public finding/evidence shape. Treat this as a versioned contract. |
-| `packages/rules/evaluate.ts` | Pure deterministic rule triggers and implementation guidance. | Adding or changing a rule. Keep stable IDs and add fixture/test coverage. |
-| `packages/rules/index.ts` | Rule-engine export surface. | Exposing an additional evaluator. |
+## Deterministic analysis and research
 
-For a new rule, add the input evidence first, add one stable ID and full finding text in `evaluate.ts`, then add positive and negative cases in `tests/rules/evaluate.test.ts` or `tests/verification/before-after.test.ts`.
+| Location | Responsibility | Future edits |
+| --- | --- | --- |
+| `packages/rules/types.ts` | Evidence/finding contracts | Finding fields/versioning |
+| `packages/rules/evaluate.ts` | Stable actionable findings | Rule thresholds/logic |
+| `packages/analyzers/types.ts` | Versioned analyzer observation contracts | Status/group types |
+| `packages/analyzers/evaluate.ts` | Technical/content/entity/trust/retrieval analyzer library | Analyzer IDs/heuristics |
+| `packages/research/sources.ts` | Versioned source registry and analyzer mapping | Add primary sources/mappings |
+| `docs/research-sources.md` | Human-readable source rationale | Source review notes |
 
-## Comparison, rankings, and history
+## Comparison, proposals, and verification
 
-| Location | Responsibility | Edit here when… |
-|---|---|---|
-| `packages/comparison/eligibility.ts` | Evidence-backed eligible/degraded/ineligible classification, reason codes, thresholds, and the exact incomplete message. | Changing page-usability or benchmark-admission policy. Update focused eligibility and comparison regressions with every change. |
-| `packages/comparison/types.ts` | Comparable analysis, ordered site identity, eligibility, matrix, metric, side-by-side evidence, gap, advantage, and history-facing contracts. | Adding a comparison field or changing a result contract. Treat the additive identity/evidence fields as stored API contracts. |
-| `packages/comparison/compare.ts` | 43 metric definitions, target-first row projection, eligibility-filtered benchmarks, thresholds, gap/advantage evidence, conclusion status, and explicit limitations. | Adding a comparison metric, changing benchmark exclusion, or changing a visible delta/evidence bundle. Keep explanation and threshold adjacent. |
-| `packages/comparison/diff.ts` | Normalized-submitted-identity pairing, prior/current field groups, eligibility-aware comparability, competitor membership/order, finding/rank changes, and correlation disclaimer. | Tracking an additional historical field or changing identity, reorder, indeterminate, or rank-skip semantics. |
-| `packages/ranking/types.ts` | Optional provider seam and manual rank normalization/validation. | Implementing a verified rank adapter. Put the adapter in a new module; keep manual data provenance explicit. |
-| `services/analyzer/compare.ts` | Creates stable target-first identities before parallel analysis, validates normalized outputs, then performs comparison, prior-run lookup, diff, and save. | Changing submitted URL ordering/identity or comparison orchestration, not eligibility/metric formulas. |
+| Location | Responsibility | Future edits |
+| --- | --- | --- |
+| `packages/comparison/types.ts` | 43-metric matrix and finding contracts | Comparison output model |
+| `packages/comparison/eligibility.ts` | Eligible/degraded/ineligible classification | Challenge/thin-page policy |
+| `packages/comparison/compare.ts` | Rows, benchmarks, thresholds, gaps/advantages/shared gaps | Metrics and rule thresholds |
+| `packages/comparison/diff.ts` | Semantic history and correlation boundary | Tracked fields/history rules |
+| `packages/proposals/types.ts` | Reviewable artifact contract/label | Artifact types |
+| `packages/proposals/generate.ts` | Deterministic artifacts from target gaps | Proposal templates |
+| `packages/verification/types.ts` | Verification report contract | Verification classifications |
+| `packages/verification/verify.ts` | Rule/analyzer/proposal/evidence before-after checks | Recrawl verification logic |
 
-Automatic rankings are deliberately absent. A future provider should implement `RankObservationProvider`, identify its source as `provider:<id>`, and remain optional. Never substitute estimated positions for observed data.
+## Persistence, observations, AI, reports
 
-### Where a future AI interpretation layer belongs
+| Location | Responsibility | Future edits |
+| --- | --- | --- |
+| `packages/storage/types.ts` | RunStore port and durable run identity | Adapter-neutral storage API |
+| `packages/storage/json-run-store.ts` | Atomic JSON, strict schema/alignment/semantic validation | Record schema/migrations/diagnostics |
+| `packages/storage/sqlite-run-store.ts` | Transactional SQLite implementation | Durable queries/close/backup behavior |
+| `packages/storage/sqlite-migrations.ts` | Executable migration list | Register every migration |
+| `packages/storage/migrations/001_initial.sql` | Reviewed SQL reference | Schema review |
+| `packages/visibility/types.ts` | Manual observation/provider interfaces | Approved provider contract |
+| `packages/visibility/json-observation-store.ts` | Atomic manual observation persistence | Move to unified DB later |
+| `packages/ai/types.ts` | Provider/request/result contracts | Reviewed provider adapters |
+| `packages/ai/config.ts` | Optional AI bounds/config | AI environment bounds |
+| `packages/ai/run-evidence.ts` | Saved-run evidence ID projection | Evidence allowlist |
+| `packages/ai/interpret.ts` | Prompt, timeout, schema/citation guardrails | Prompt/provider validation |
+| `packages/reports/report.ts` | Complete report model and JSON/Markdown/CSV renderers | PDF/new formats |
 
-Create a new `packages/interpretation/` boundary only after the deterministic output contracts are stable. Put provider-neutral input/output types in `packages/interpretation/types.ts`, keep any vendor adapter in a separate file such as `packages/interpretation/providers/<provider>.ts`, and call it from a new orchestration service after `analyzeUrl()` or `compareAnalyses()` has completed. It must consume immutable deterministic evidence, preserve source IDs/URLs/timestamps, return a separately labeled `interpretation` object, and never replace findings, raw evidence, comparison deltas, or limitations.
+## Browser workspace
 
-Wire an opt-in route in `services/analyzer/app.ts` and validate its request in `packages/schemas/api.ts`. Add contract tests under `tests/interpretation/`, route/error tests in `tests/analyzer/app.test.ts`, and update `docs/api.md`, `docs/architecture.md`, `docs/methodology.md`, and this map. Keep the feature disabled without explicit configuration and record provider/model/version provenance. No AI provider or API is implemented in this MVP.
+| Location | Responsibility | Future edits |
+| --- | --- | --- |
+| `apps/web/public/index.html` | Accessible tabs, forms, result containers, roadmap labels | Workspace structure/copy |
+| `apps/web/public/app.js` | API calls, filters, evidence rendering, history, exports | Browser behavior; keep deterministic logic server-side |
+| `apps/web/public/styles.css` | Responsive layout, states, evidence cards, accessibility | Visual/system styles |
 
-## Persistence
+## Tests and fixtures
 
-| Location | Responsibility | Edit here when… |
-|---|---|---|
-| `packages/storage/types.ts` | `RunStore`, record/summary contracts (including ordered `sites`), schema version, and application version. | Adding a stored identity/history field, storage adapter, or intentionally versioning stored data. |
-| `packages/storage/json-run-store.ts` | Runtime structural validation plus deterministic `compareAnalyses`/`diffRuns` semantic validation for eligibility, identity, evidence, conclusions, and history; legacy comparison/history recomputation; serialized local writes; temporary-file cleanup; atomic rename; retrieval; and normalized-target matching. | Changing JSON persistence, compatibility normalization, validation, or latest-run matching. Do not silently repair corrupt history. |
-| `data/.gitkeep` | Keeps the generated-data directory in Git. | Normally never; `data/runs.json` is runtime output and ignored. |
+- `tests/crawler/`: URL, safety, fetch, resources, bounded multi-page crawl.
+- `tests/parser/`, `tests/entities/`, `tests/rules/`, `tests/analyzers/`: extraction, evidence, stable rule/analyzer behavior.
+- `tests/comparison/`: ordering, eligibility, metrics, gaps, history.
+- `tests/storage/`: JSON corruption/alignment/history semantics and SQLite migration/round-trip behavior.
+- `tests/proposals/`, `tests/verification/`, `tests/reports/`: artifact, recrawl, and export contracts.
+- `tests/ai/`, `tests/visibility/`: mock-only AI validation and isolated manual observation persistence.
+- `tests/analyzer/`: API integration, comparison persistence/reopen/history, frontend source regression, environment validation.
+- `fixtures/verification/original.html` and `corrected.html`: deterministic no-network before/after pages.
 
-To replace JSON storage, implement `RunStore` in a new adapter and inject it through `createApp()`/`compareAndSaveRun()`. Keep storage-version migration explicit.
+## Documentation
 
-## Request contracts
+- `README.md`: product/setup/workflow summary.
+- `docs/architecture.md`: boundaries and data flow.
+- `docs/methodology.md`: evidence, comparison, history, non-causation method.
+- `docs/api.md`: route/input/output behavior.
+- `docs/storage.md`: adapter and migration details.
+- `docs/deployment.md`: Render/operations/fixture fallback.
+- `docs/demo-guide.md`: exact operator walkthrough.
+- `docs/decision-log.md`: consequential choices.
+- `docs/build-journal.md`: verified execution record.
+- `docs/change-report.md`: final acceptance handoff.
 
-| Location | Responsibility | Edit here when… |
-|---|---|---|
-| `packages/schemas/api.ts` | Strict Zod request/query schemas and cross-field URL/rank validation. | Adding or changing accepted API inputs. |
-| `docs/api.md` | Human-readable endpoint, response, and error reference. | Any route or request/response contract changes. |
-
-## Verification assets and tests
-
-| Location | Coverage |
-|---|---|
-| `fixtures/verification/original.html` | Known canonical, heading, JSON-LD, and image-alt defects. |
-| `fixtures/verification/corrected.html` | Deterministically corrected version used to prove resolution. |
-| `tests/crawler/url.test.ts` | Foundation URL normalization. |
-| `tests/crawler/safety.test.ts` | Literal IP, DNS answer, mixed-answer, and public-host safety behavior. |
-| `tests/crawler/fetch.test.ts` | Redirects, timeout, body limit, redirect safety, and fetch evidence. |
-| `tests/crawler/resources.test.ts` | Shared policy and resource evidence. |
-| `tests/parser/page.test.ts` | Foundation parsing behavior. |
-| `tests/parser/evidence.test.ts` | Expanded canonical, headings, questions, JSON-LD, links, media, and coverage evidence. |
-| `tests/entities/extract.test.ts` | Coverage dimensions and source-linked signals. |
-| `tests/rules/evaluate.test.ts` | Rule stability and classification. |
-| `tests/verification/before-after.test.ts` | Fixture-based new/resolved/unchanged rule proof. |
-| `tests/comparison/eligibility.test.ts` | 403, HTTP 200 access-denied, empty, near-empty/degraded, and valid eligibility boundaries. |
-| `tests/comparison/compare.test.ts` | Matrix projection, target-first identities, mixed valid/invalid exclusion, unavailable targets, side-by-side evidence, multi-competitor gaps, and manual ranks. |
-| `tests/comparison/diff.test.ts` | Normalized submitted identity matching, membership versus reorder semantics, indeterminate ineligible snapshots, field groups, findings, query matching, and rank changes. |
-| `tests/ranking/types.test.ts` | Manual rank range and URL normalization. |
-| `tests/storage/json-run-store.test.ts` | Atomic persistence, validation failures, ordering, and cleanup. |
-| `tests/analyzer/analyze.test.ts` | Real orchestration with injected acquisition seams. |
-| `tests/analyzer/compare.test.ts` | Equal-path compare/save/history orchestration and stable ordering despite out-of-order parallel completion. |
-| `tests/analyzer/app.test.ts` | Route validation, error envelope/statuses, payload limit, and static interface. |
-| `tests/helpers/analysis.ts` | Complete deterministic analysis fixture builder shared by comparison/storage tests. |
-
-When a public contract changes, update the closest unit test and an integration-level test. The required local gate is `npm test` followed by `npm run build`.
-
-## Project and documentation files
-
-| Location | Responsibility |
-|---|---|
-| `package.json` / `package-lock.json` | Reproducible scripts and exact dependency graph. |
-| `tsconfig.json` | Strict TypeScript compilation for packages, services, and tests. |
-| `vitest.config.ts` | Test discovery/runtime configuration. |
-| `.env.example` | Environment-variable reference; values must be supplied to the process explicitly. |
-| `.gitignore` | Excludes dependencies, build output, real environment files, and generated run data. |
-| `README.md` | Setup, current capability boundary, and roadmap. |
-| `docs/architecture.md` | Layer boundaries and request flow. |
-| `docs/methodology.md` | Evidence classes, heuristic labeling, comparison method, and unknowns. |
-| `docs/decision-log.md` | Important design decisions and trade-offs. |
-| `docs/build-journal.md` | Preserved chronological foundation plus completed MVP milestones. |
-| `docs/change-report.md` | Exact checkpoint-to-MVP handoff, verification, commits, limitations, and changed files. |
-
-## Generated and build paths
-
-- `dist/` is TypeScript build output and is never hand-edited.
-- `node_modules/` is installed dependency content and is never committed.
-- `data/runs.json` is local generated history and is never committed.
-- `data/runs.json.tmp` may exist only transiently during a write; the store cleans it after failures.
-- A real `.env` file is ignored and is not read automatically by this MVP.
-
-## Focused comparison hardening edit guide
-
-- Eligibility reason patterns/thresholds or exact incomplete message: `packages/comparison/eligibility.ts`.
-- Benchmark inclusion, `complete`/`partial`/`unavailable`, exclusions, matrix identity fields, or side-by-side gap evidence: `packages/comparison/compare.ts` and `packages/comparison/types.ts`.
-- Target-first submitted identity creation and analyzer-order validation: `services/analyzer/compare.ts`.
-- Normalized-submitted-URL history pairing, competitor added/removed/reordered semantics, indeterminate findings, or rank-skip behavior: `packages/comparison/diff.ts`.
-- Stored additive fields, runtime schemas, summaries, and compatibility handling: `packages/storage/types.ts` and `packages/storage/json-run-store.ts`.
-- Browser eligibility, raw retrieval, comparison evidence, and disabled-conclusion rendering: `apps/web/public/app.js` (presentation only); document structure and static-asset cache keys: `apps/web/public/index.html`; presentation styles: `apps/web/public/styles.css`.
-- Required regressions: `tests/comparison/eligibility.test.ts`, `tests/comparison/compare.test.ts`, `tests/comparison/diff.test.ts`, `tests/analyzer/compare.test.ts`, `tests/storage/json-run-store.test.ts`, and `tests/analyzer/app.test.ts`.
+Generated locations: `dist/` contains TypeScript output; `data/` contains ignored runtime data. Neither should be hand-edited.

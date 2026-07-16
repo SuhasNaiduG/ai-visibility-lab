@@ -1,71 +1,95 @@
 # Decision Log
 
-## 2026-07-15 — Extend the verified checkpoint in place
+## 2026-07-15 — Preserve the verified foundation
 
-**Decision:** Keep `354df4c` as the untouched foundation and add focused commits on `main` in the existing repository.
+**Decision:** Continue in the existing repository and branch from foundation checkpoint `354df4c`; preserve working modules and history.
 
-**Why:** The checkpoint already has strict TypeScript, URL normalization, fetching, parsing, resource checks, an Express API, and passing tests. Rebuilding would discard verified behavior and history.
+**Reason:** URL safety, deterministic acquisition/parsing, typed rules, API, storage, and tests were already verified. Rebuilding would reduce evidence and reviewability.
 
-## 2026-07-15 — Restore the dependency manifest
+## 2026-07-15 — Deterministic evidence before interpretation
 
-**Decision:** Copy the runtime/dev dependency declarations already present in `package-lock.json` into `package.json`; add a Node 20 engine requirement.
+**Decision:** Keep raw evidence, normalized evidence, deterministic rules/analyzers, proposals, manual observations, and optional AI output as separate classes.
 
-**Why:** The checkpoint worked only because `node_modules` already existed. A fresh install saw every package as extraneous. This restores reproducibility without changing dependency versions or adding a new service.
+**Reason:** A missing page signal cannot establish a missing real-world fact, and a language model must never become the evidence source of record.
 
-## 2026-07-15 — Use one outbound request policy
+## 2026-07-15 — No composite visibility score
 
-**Decision:** Route HTML, robots, sitemap, and redirect hops through shared timeout, redirect, user-agent, size, and public-network controls.
+**Decision:** Expose raw counts, booleans, sets, ratios/context, thresholds, and exact deltas only.
 
-**Why:** Separate network policies drift and can leave SSRF or hanging-request gaps. Injectable fetch/DNS seams keep normal tests offline and deterministic.
+**Reason:** Hidden weights would imply predictive knowledge of search/AI systems and obscure the evidence that a reviewer needs.
 
-**Trade-off:** DNS is checked immediately before native fetch but the socket cannot be pinned to that exact answer, so production still needs egress controls or a lower-level transport.
+## 2026-07-15 — Stable submitted URL identity
 
-## 2026-07-15 — Preserve raw evidence and stable rule IDs
+**Decision:** Target is input order 0; competitors retain order 1–5. Normalized submitted URL is the durable history identity; final redirected URL remains evidence.
 
-**Decision:** Expand parsing before adding recommendations; keep invalid JSON-LD, empty headings/anchors, missing alt data, and source locations.
+**Reason:** Redirects and asynchronous analysis must not silently change which submitted site a row or historical page represents.
 
-**Why:** Historical verification and credible guidance require the raw values that triggered each finding. Stable IDs make before/after resolution deterministic.
+## 2026-07-15 — Exclude unusable benchmarks, retain evidence
 
-## 2026-07-15 — No aggregate visibility score
+**Decision:** Classify pages as eligible, degraded, or ineligible. Keep every row visible but exclude ineligible competitors from every conclusion.
 
-**Decision:** Return raw metrics, rule findings, metric explanations, and visible deltas.
+**Reason:** An HTTP 200 challenge/error page is not a useful content benchmark. Hiding it would also conceal why comparison became partial or unavailable.
 
-**Why:** A weighted score would introduce arbitrary hidden assumptions and imply predictive knowledge the application does not possess.
+## 2026-07-15 — Strict semantic persistence
 
-## 2026-07-15 — Analyze competitors through the same path
+**Decision:** Parse shape, check alignment, recompute comparison/history/verification, and reject mismatches with exact diagnostic paths.
 
-**Decision:** Call the single-site analyzer for the target and every competitor, then project the same fields into a comparison matrix.
+**Reason:** A saved run must be reproducible, not merely JSON-shaped. Validation remains strict; recursive equality ignores object insertion order but preserves array order.
 
-**Why:** A separate competitor parser would make deltas incomparable. Competitor tactics remain observations, not causal prescriptions.
+## 2026-07-16 — Bounded same-origin breadth-first crawl
 
-## 2026-07-15 — JSON persistence behind an interface
+**Decision:** Maximum 50 pages/depth 5, deterministic BFS, explicit pacing, tracking removal, duplicate prevention, practical robots/sitemap support, and partial states.
 
-**Decision:** Use a validated, atomic JSON-file adapter for the local MVP and keep the store contract separate.
+**Reason:** It creates useful site research without unbounded crawling, hidden skips, cross-origin expansion, or irresponsible request volume.
 
-**Why:** It requires no account or service and is sufficient for sequential local demonstrations. The interface permits a later SQLite/PostgreSQL adapter.
+**Trade-off:** Crawls are synchronous web requests. A durable job worker is required before raising limits.
 
-**Trade-off:** The adapter is intended for a single application process, not multi-host concurrency or large datasets.
+## 2026-07-16 — Version analyzers and sources
 
-## 2026-07-15 — Manual rank observations with a provider seam
+**Decision:** Analyzer observations use stable IDs/version `1.0.0`; a registry maps them to primary guidance or explicitly bounded internal heuristics.
 
-**Decision:** Accept optional positions from the request, label them manual, and define a provider interface without implementing a provider.
+**Reason:** Historical status changes must distinguish evidence changes from analyzer changes, and heuristics must never be presented as external ranking guidance.
 
-**Why:** True automatic rankings require external access and vary by context. Manual values enable historical correlation demonstrations without fabricating data.
+## 2026-07-16 — Generate reviewable proposals, never production claims
 
-## 2026-07-15 — Static browser interface
+**Decision:** Proposals are deterministic templates linked to evidence and labeled `Proposal — requires factual and professional review before publication.`
 
-**Decision:** Serve plain HTML, CSS, and JavaScript from Express.
+**Reason:** The system can identify implementation directions but cannot verify credentials, claims, addresses, prices, reviews, medical adequacy, or authorization to publish.
 
-**Why:** The requirement prioritizes evidence, comparison, history, and maintainability. A framework/build pipeline would add cost without improving the deterministic engine.
+## 2026-07-16 — Optional provider-neutral AI only
 
-## 2026-07-15 — Structured deltas and explicit history inventory
+**Decision:** Ship interfaces, bounds, prompt/output validation, and citations, but no live provider adapter or dependency.
 
-**Decision:** Preserve prose explanations but also return typed target/benchmark/difference/threshold values for scalar comparisons and explicit boolean presence deltas. Track a documented field inventory rather than implying that every response byte is historically diffed.
+**Reason:** The deterministic product works without AI; enabling a provider requires an explicit reviewed integration and secrets process.
 
-**Why:** Machine-readable deltas make the comparison auditable, while an explicit history list prevents a false promise of complete semantic change detection.
+## 2026-07-16 — Manual observations, no automated result scraping
 
-## 2026-07-15 — Trusted-local deployment boundary
+**Decision:** Store user-observed rank/citation context and expose an empty provider registry.
 
-**Decision:** Document the absence of authentication, rate limiting, multi-process storage coordination, rendered-page crawling, content-type enforcement, and production egress controls instead of presenting the local MVP as deployment-ready.
+**Reason:** Result collection varies by engine/location/device and requires approved access. The interface must not imply an inactive provider is working.
 
-**Why:** These are material operational boundaries. Making them explicit preserves the evidence-first contract and identifies the next safe engineering work.
+## 2026-07-16 — JSON locally, SQLite for one durable instance
+
+**Decision:** Preserve `RunStore`, keep atomic JSON as default, and add a migration-backed built-in SQLite adapter without installing a dependency.
+
+**Reason:** SQLite plus persistent disk is a strong single-instance deployment path. Managed PostgreSQL would require approved dependencies and a separate migration/operations plan.
+
+**Trade-off:** Node's SQLite API remains release-candidate stability; manual visibility observations still use their JSON adapter.
+
+## 2026-07-16 — JSON/Markdown/CSV reports; defer PDF
+
+**Decision:** Export complete evidence in three stable formats and state PDF is deferred.
+
+**Reason:** PDF layout/dependency work must not block verified portable reports.
+
+## 2026-07-16 — Static accessible workspace
+
+**Decision:** Continue with server-served HTML/CSS/JavaScript, accessible tabs, responsive evidence cards, filters, clear errors/empty states, and no decorative scoring widgets.
+
+**Reason:** A framework migration would not improve deterministic correctness and would expand the dependency/build surface.
+
+## 2026-07-16 — Render single-instance production shape
+
+**Decision:** Pin Node 24 LTS, mount `/var/data`, use SQLite, validate all operational inputs before listening, log only safe metadata, and drain on termination.
+
+**Reason:** This is deployable without claiming multi-instance scale. Fixture fallback stays explicit/test-only so failed live requests never silently generate demo records.

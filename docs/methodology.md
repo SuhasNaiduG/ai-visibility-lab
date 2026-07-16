@@ -2,88 +2,86 @@
 
 ## Evidence classes
 
-The application separates three data classes:
+The interface and data model distinguish:
 
-1. **Observed website data** — response metadata, final URL, page markup/text, links, resources, and deterministic values captured at a timestamp.
-2. **Estimated or manually entered rank data** — optional user-supplied positions labeled `source: manual`. The MVP does not verify or collect them.
-3. **First-party analytics data** — traffic, impressions, clicks, conversions, and revenue. This class is not available or represented by the MVP.
+1. **Observed evidence**: public response metadata, DOM text/markup, links, resources, and deterministic counts captured at a time.
+2. **Deterministic inference**: rule/analyzer interpretation derived entirely from observed fields.
+3. **Editorial heuristic**: a transparent review threshold or lexical pattern, never a ranking law.
+4. **Proposal**: a draft implementation artifact that requires factual and professional review.
+5. **Manual observation**: user-entered rank/citation context that the lab did not collect or verify.
+6. **Optional AI interpretation**: schema-validated downstream commentary citing preserved evidence IDs.
 
-Every finding points to structured evidence containing a source URL, field, observed value, and fetch time, plus selector/snippet details when practical. Malformed JSON-LD is preserved as parse-error evidence instead of discarded.
+Every finding includes source evidence, stable rule ID/version, interpretation, implementation direction, expected observable outcome, verification, confidence, and limitation. Malformed JSON-LD, unsuccessful resources, redirects, blocked pages, and partial crawls remain visible.
 
-## Direct observations
+## Acquisition
 
-Direct observations include HTTP/resource status, redirects, canonical values, robots directives, document language, viewport markup, heading counts/text, JSON-LD/schema types, links/domains/anchors, images/alt attributes, normalized visible text, and deterministic counts. These facts describe what the crawler received, not what a search engine necessarily indexed.
+URLs are normalized before use. The crawler rejects unsafe hosts and redirect targets, enforces time/body/redirect/content-type bounds, and records the final response. Multi-page projects are same-origin breadth-first traversals with deterministic queue order. Fragments and known campaign parameters (`utm_*`, `gclid`, `fbclid`, `msclkid`) do not create duplicate identities; other query parameters remain and are sorted.
 
-## Editorial heuristics
+The crawl uses `User-agent: *` allow/disallow rules with longest-match precedence and discovers sitemap URLs where practical. This is bounded RFC-informed behavior, not a full search-engine crawler implementation. A `robots.txt` file is not authorization.
 
-Title/description length, very low internal-link counts, content breadth, and some coverage comparisons are editorial heuristics. Their thresholds are transparent and their findings are labeled accordingly. They are review prompts, not ranking laws.
+## Parsing and normalization
 
-Question, FAQ, direct-answer, entity, service, location, trust, and contact signals use inspectable patterns and source locations. This is retrieval-readiness and answerability evidence, not advanced semantic understanding or an LLM prediction.
+The parser preserves raw response evidence while separately exposing normalized visible text, questions, answer candidates, headings, links, JSON-LD types/errors, image-alt issues, and coverage signals. Markup/entities and whitespace are normalized; navigation/footer noise, malformed fragments, oversized question candidates, and normalized duplicates are bounded by deterministic rules.
 
-## Comparison method
+Static source is analyzed without executing client JavaScript. Missing evidence can mean the fact is absent from this response, dynamically rendered, inaccessible, differently phrased, outside the page, or unsupported by the extractor.
 
-All sites use the identical analyzer. The comparison matrix exposes raw values and short explanations. Gaps are emitted only by documented boolean, set, or numeric-delta logic. A gap says a competitor has a different observed signal and gives a truthful implementation direction; it never says to copy wording.
+## Rules and analyzer library
 
-Competitor-only topics or schema types require human validation. A competitor implementation may be inaccurate, irrelevant, or unrelated to its performance. Structured data should be added only when it accurately represents visible target content. The system never recommends fabricating reviews, ratings, credentials, addresses, locations, medical claims, or guarantees.
+Finding rules are pure functions with version `1.0.0`. The analyzer library version is `1.0.0` and returns `observed`, `partially-observed`, `not-observed`, `needs-human-review`, or `not-applicable`.
 
-### Eligibility and benchmark policy
+Analyzer groups:
 
-Comparison eligibility is deterministic and evidence-backed. Body challenge/error phrases require bounded weak-page evidence so a normal article discussing CAPTCHA, security, or service errors is not treated as the challenge/error itself. A response is:
+- **technical**: retrieval status, indexability, canonical, heading structure, image alternatives, structured data;
+- **content-answerability**: visible questions/answers, pricing, insurance, process, risks, alternatives, eligibility, dates;
+- **entities**: organization, service, location, contact, provider/author, schema-visible consistency;
+- **trust-YMYL**: credentials, medical review, citations, policies, testimonials/cases, associations/publications, financing;
+- **retrieval-support**: answer extractability, definitions, section clarity, entity naming, component evidence density.
 
-- `ineligible` when it is non-2xx, presents access-denied/bot/CAPTCHA/security/error language in the title or a short/low-evidence body, contains no extracted content, contains under 100 words with no normal page evidence, or is extremely short (under 20 words) with fewer than two normal page signals;
-- `degraded` but still usable when no ineligible condition applies and it contains under 50 words, contains at least 100 words but no normal page signal, or contains under 100 words with exactly one normal page signal; or
-- `eligible` when none of those conditions applies.
+Lexical presence is not truth, completeness, authority, professional adequacy, ranking impact, or citation likelihood. Trust and YMYL observations frequently require human review even when text is present.
 
-Normal page signals are title, description, H1, headings, links, and schema types. The classifier can therefore reject an HTTP 200 response whose visible result is an access-denied page instead of treating transport success as page success. Every reason includes a stable code and structured retrieval evidence.
+## Comparison eligibility
 
-All submitted sites remain visible in the raw matrix. An ineligible competitor is excluded from every scalar, boolean, and set benchmark calculation and appears in `excludedCompetitorUrls`. If the target is ineligible, or no competitor remains usable, `conclusionStatus` is `unavailable` and the comparison emits no gaps, advantages, or competitor-only sets. If at least one benchmark remains usable but any site is degraded or ineligible, the status is `partial`; otherwise it is `complete`.
+Each site is `eligible`, `degraded`, or `ineligible`. Transport success alone is insufficient: bounded access-denied, CAPTCHA, security, error, empty, or near-empty evidence can make a 200 response unusable. Normal page signals include title, description, H1/headings, links, and schema.
 
-Whenever any site is ineligible, `incompleteMessage` is exactly:
+- Ineligible competitors remain in raw rows but are excluded from every benchmark.
+- If the target is ineligible or no eligible/degraded competitor remains, conclusions are unavailable.
+- Any degraded/ineligible site makes otherwise available conclusions partial.
+- Target remains order 0; competitors preserve submitted order 1–5 regardless of asynchronous completion.
 
-> Comparison incomplete: this website did not return a usable page to the analyzer. Raw retrieval evidence is shown, but it was excluded from competitive conclusions.
+## Comparison metrics and rules
 
-`incompleteMessage` is `null` when no site is ineligible, including a partial comparison caused only by degraded evidence.
+The matrix contains 43 raw/context metrics spanning response/indexability/resources, metadata, headings, content/answerability, structured data, links/media, and lexical coverage. There is no weighted composite.
 
-### Ordered identity and side-by-side evidence
+Boolean rules compare observed presence. Scalar rules use declared thresholds, including 100 words, two headings, three internal links, and one-unit differences for questions, answers, missing alt, heading issues, JSON-LD errors, anchors, services, and locations. Reverse rules make fewer errors/issues favorable. Set rules expose competitor-only schema types, topics, and questions. Each emitted finding carries the exact target/benchmark values and threshold.
 
-The target is always input order `0`; competitors retain submitted order `1` through `3`, regardless of asynchronous completion. Each stored `site` keeps the role, trimmed submitted URL, normalized submitted URL, final fetched URL, and eligibility. The normalized submitted URL is the stable identity; a redirect or changed final URL remains observable evidence and does not silently turn one submitted site into another.
+Counts are prompts for inspection, not objectives to maximize. In particular, word count is not quality, more schema is not automatically better, and a missing-alt count must be reviewed against total/decorative images.
 
-Every emitted gap has non-empty `targetEvidence` and competitor evidence bundles. Each competitor bundle exposes its normalized identity, input order, observed value, whether it supplied the relevant benchmark, and nested evidence with source URL, field, fetch time, and selector/snippet when available. This supports a visible target-versus-competitor review without relying on positional inference or a prose-only conclusion.
+## Proposals
 
-## History and correlation
+Artifacts are derived from target gaps and carry this boundary:
 
-A prior run matches when its normalized submitted target URL equals the new run's normalized submitted target URL. The final redirected URL is evidence, not the history key. Analyses and changes are paired by normalized submitted site identity rather than final URL or array position. The newest matching saved run is the baseline.
+> Proposal — requires factual and professional review before publication.
 
-Competitor membership and order are separate facts. `addedUrls` and `removedUrls` compare normalized submitted competitor identities. Reordering compares only competitors common to both runs, so an addition or removal alone is not mislabeled as a reorder. `ordering.previousOrder` and `currentOrder` preserve the complete normalized sequences, while `moves` records previous/current input positions for common competitors whose relative order changed.
+They link the source finding/evidence, proposed artifact, assumptions, facts to confirm, reviewer requirement, and verification steps. The system never invents credentials, reviews, ratings, offices, awards, certifications, medical claims, prices, insurance acceptance, or guarantees.
 
-Stable rule IDs allow findings to be classified as new, resolved, or unchanged. Technical/metadata/schema/heading/content/link/media values are compared separately. Manual rank delta is `current position - previous position`, so a negative number represents movement toward position 1.
+## History semantics
 
-Non-technical history is comparable only when both snapshots for that site are usable benchmarks. If either snapshot is ineligible, technical retrieval and eligibility changes remain visible, metadata/content/schema/heading/link/media differences are withheld, and differing finding IDs are reported as `indeterminateRuleIds` rather than new or resolved. If either target snapshot is ineligible, manual-rank comparison is skipped with the reason `Manual rank changes were not compared because target page eligibility made content correlation indeterminate.`
+The newest prior run with the same normalized submitted target URL is the baseline. Redirect destinations are evidence, not identity. Pages pair by normalized submitted URL. Competitor additions/removals are separate from relative reordering.
 
-When a page change and manual rank change occur in the same interval, the report explicitly says both were observed and does not claim one caused the other. Many unobserved variables can affect discovery or ranking.
+Tracked changes are grouped as technical, metadata, schema, headings, content, links, and media. Rule IDs become new/resolved/unchanged; when either paired page is ineligible, non-technical content comparison is withheld and differing rules are indeterminate. Manual rank comparison also requires a matching normalized query label and comparable target evidence.
 
-## Why there is no overall score
+Verification compares `ruleId@ruleVersion` and analyzer ID/version/status, links current findings to prior proposals, summarizes pages/sites, and reports evidence diffs. Every report states:
 
-An aggregate “AI visibility score” would require arbitrary weights and could hide important raw differences. It could also imply a proprietary ranking or citation prediction the evidence cannot support. The lab therefore returns raw metrics, stable rules, evidence coverage, and transparent comparison gaps.
+> Website changes and observed visibility changes occurred during the same interval. This does not establish causation.
 
-No single metric proves search ranking, visibility, conversion performance, or eligibility for citation by an AI system.
+## Visibility observations
 
-## Unknowns and blind spots
+Manual observations record query, engine, location, device, date, rank and/or citation, optional citation/reference/screenshot locations, and notes. They are not automatically verified. Provider interfaces exist, but the API truthfully returns no active automated providers.
 
-Public-page comparison cannot reveal:
+## Research sources
 
-- private analytics, conversions, or revenue;
-- Search Console impressions/clicks unless an owned-site connector is added;
-- backlinks or off-page authority;
-- the page version actually retained by an external index;
-- personalization, location, device, or query-specific result variation;
-- proprietary search or AI retrieval/ranking factors;
-- true historical rank without a verified provider or first-party record.
+Registry version `1.0.0` separates standards/official guidance/schema/accessibility sources from bounded internal heuristics. Source support applies only to the stated claim; it never converts an observable page signal into a guaranteed visibility outcome. See `docs/research-sources.md`.
 
-The crawler observes one submitted page plus two root resources. It is not yet a robots-policy-aware multi-page site crawler. Native fetch also leaves a narrow DNS-rebinding window after validation.
+## Known blind spots
 
-Static-source extraction does not execute client JavaScript or fully determine rendered CSS visibility. Relative URL resolution currently ignores an HTML `base` element, and exact hostname equality defines the internal-link boundary. A successful conventional `robots.txt` or `sitemap.xml` check means only that the checked root path returned 2xx; the MVP does not validate resource content or discover declared sitemap locations. Upstream body parsing is bounded but not gated by response content type.
-
-Numeric comparison rules use raw count differences. In particular, missing image alt values are compared as counts rather than a ratio to total images, so the raw image volume must be reviewed alongside the gap. Coverage terms are inspectable lexical/structured signals, not a semantic topic model.
-
-Eligibility detection is intentionally bounded. A novel challenge page may evade the known patterns, and a legitimate very short page may be degraded or excluded until a human reviews the raw response. Degraded pages remain usable benchmarks with an explicit caution; the status does not certify content quality or relevance.
+The system cannot observe private analytics, conversions, revenue, backlinks, Search Console data, actual index state, personalization, proprietary retrieval factors, dynamic-only DOM, authenticated pages, or historical rankings not supplied by a user/provider. Native fetch has a residual DNS-rebinding window. Resource discovery and robots behavior are practical subsets. Multi-page crawl remains bounded and synchronous.
