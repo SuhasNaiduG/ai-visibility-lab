@@ -175,6 +175,7 @@ describe("demo implementation and verification UI", () => {
   it("exposes the complete Release 1 analytics workspace and required Search Performance fields", async () => {
     const source = await readFile(new URL("../../apps/web/public/app.js", import.meta.url), "utf8");
     const html = await readFile(new URL("../../apps/web/public/index.html", import.meta.url), "utf8");
+    const styles = await readFile(new URL("../../apps/web/public/styles.css", import.meta.url), "utf8");
 
     for (const panel of ["data-sources-panel", "imports-panel", "data-explorer-panel", "search-performance-panel", "opportunities-panel"]) {
       expect(html).toContain(`id="${panel}"`);
@@ -189,6 +190,9 @@ describe("demo implementation and verification UI", () => {
     expect(source).toContain("file.text()");
     expect(source).toContain("values are not retained");
     expect(source).toContain("Opportunities and redacted audit history will remain.");
+    expect(source).toContain("event.currentTarget.value));");
+    expect(styles).toContain(".panel, .results, .section-card { min-width: 0; max-width: 100%; }");
+    expect(html).toContain("growth-release-1-responsive");
   });
 });
 

@@ -1311,6 +1311,7 @@ $("#refresh-history").addEventListener("click", loadRunHistory);
 $("#refresh-sources").addEventListener("click", loadResearchSources);
 $("#data-sources-form").addEventListener("submit", (event) => { event.preventDefault(); loadDataSources(); });
 $("#import-form").addEventListener("submit", previewImport);
+$("#import-form select[name='projectId']").addEventListener("change", (event) => loadImports(event.currentTarget.value));
 $("#commit-import").addEventListener("click", commitImport);
 $("#data-explorer-form").addEventListener("submit", loadDataExplorer);
 $("#search-performance-form").addEventListener("submit", loadSearchPerformance);

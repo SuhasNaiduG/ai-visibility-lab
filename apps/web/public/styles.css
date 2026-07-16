@@ -58,20 +58,21 @@ input:focus, select:focus, textarea:focus { outline: 3px solid rgba(17, 97, 73, 
 .import-form, .analytics-filter-form { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .mapping-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-top: 18px; }
 .mapping-field { padding: 12px; border: 1px solid var(--line); border-radius: 9px; background: #fafcf9; }
-.analytics-records, .opportunity-list { display: grid; gap: 12px; }
-.analytics-record, .opportunity-card { padding: 16px; border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 10px; background: #fbfdfb; }
+.analytics-records, .opportunity-list { display: grid; min-width: 0; max-width: 100%; gap: 12px; }
+.analytics-record, .opportunity-card { min-width: 0; max-width: 100%; padding: 16px; border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 10px; background: #fbfdfb; overflow-wrap: anywhere; }
 .opportunity-card.high { border-left-color: var(--danger); }
 .opportunity-card.medium { border-left-color: var(--warn); }
 .opportunity-card.low { border-left-color: var(--accent); }
-.opportunity-heading { display: flex; gap: 12px; justify-content: space-between; align-items: start; }
+.opportunity-heading { display: flex; flex-wrap: wrap; min-width: 0; gap: 12px; justify-content: space-between; align-items: start; }
 .opportunity-heading h3 { margin-bottom: 4px; }
 .workflow-controls, .export-links, .row-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; margin-top: 12px; }
 .workflow-controls label { min-width: 180px; }
-.export-links a { padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; color: var(--accent); font-weight: 750; text-decoration: none; }
+.export-links a { min-width: 0; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; color: var(--accent); font-weight: 750; text-decoration: none; overflow-wrap: anywhere; }
 .detail-drawer:not(:empty) { padding: 18px; border: 2px solid var(--accent); border-radius: 12px; background: #f8fcfa; }
 .lineage { border-left: 4px solid #5f7185; background: #f5f7fa; }
 .search-performance-table td:nth-child(1), .search-performance-table td:nth-child(2) { max-width: 260px; overflow-wrap: anywhere; }
 .release-boundary { padding: 12px 14px; border-left: 4px solid var(--accent); background: var(--accent-soft); }
+.panel, .results, .section-card { min-width: 0; max-width: 100%; }
 button[type="submit"], button.secondary, .history-open { min-height: 44px; padding: 10px 16px; border: 1px solid var(--accent); border-radius: 8px; background: var(--accent); color: #fff; font-weight: 800; }
 #commit-import, .row-open, .workflow-save, .danger-button { min-height: 40px; padding: 8px 13px; border: 1px solid var(--accent); border-radius: 8px; background: var(--accent); color: #fff; font-weight: 800; }
 #commit-import { margin-top: 16px; }
