@@ -19,7 +19,7 @@ describe("fetchHtml", () => {
       expect(new Headers(init.headers).get("user-agent")).toBe(
         "Visibility-Test/1.0"
       );
-      return new Response("<main>ok</main>", { status: 200 });
+      return new Response("<main>ok</main>", { status: 200, headers: { "content-type": "text/html" } });
     });
 
     const result = await fetchHtml(new URL("https://example.com/"), {
@@ -62,7 +62,7 @@ describe("fetchHtml", () => {
         });
       }
 
-      return new Response("done", { status: 200 });
+      return new Response("done", { status: 200, headers: { "content-type": "text/html" } });
     });
 
     const result = await fetchHtml(new URL("http://example.com/start"), {
@@ -178,7 +178,7 @@ describe("fetchHtml", () => {
     const fetchImpl: FetchImplementation = async () =>
       new Response("abcdef", {
         status: 200,
-        headers: { "content-length": "6" }
+        headers: { "content-length": "6", "content-type": "text/html" }
       });
 
     await expect(
@@ -206,7 +206,7 @@ describe("fetchHtml", () => {
       }
     });
     const fetchImpl: FetchImplementation = async () =>
-      new Response(body, { status: 200 });
+      new Response(body, { status: 200, headers: { "content-type": "text/html" } });
 
     await expect(
       fetchHtml(new URL("https://example.com/chunked"), {
@@ -244,5 +244,15 @@ describe("fetchHtml", () => {
     } catch (error: unknown) {
       expect(getCrawlerErrorHttpStatus(error)).toBe(502);
     }
+  });
+
+  it("rejects a successful non-HTML response", async () => {
+    await expect(fetchHtml(new URL("https://example.com/image.png"), {
+      dnsLookup: publicDns,
+      fetchImpl: async () => new Response("not html", { status: 200, headers: { "content-type": "image/png" } })
+    })).rejects.toMatchObject({
+      code: "UNSUPPORTED_CONTENT_TYPE",
+      details: { contentType: "image/png" }
+    });
   });
 });

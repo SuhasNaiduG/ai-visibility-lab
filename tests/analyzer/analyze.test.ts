@@ -20,7 +20,7 @@ describe("analyzeUrl orchestration", () => {
           <h1>Example service</h1><h1>Example service</h1>
           <img src="/service.jpg" />
           <a href="/contact">Contact</a>
-        </body></html>`, { status: 200 });
+        </body></html>`, { status: 200, headers: { "content-type": "text/html" } });
       }
       if (input === "https://example.com/robots.txt") {
         return new Response("not found", { status: 404 });

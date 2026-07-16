@@ -71,5 +71,13 @@ export const latestRunQuerySchema = z.strictObject({
   targetUrl: urlInput
 });
 
+export const crawlProjectRequestSchema = z.strictObject({
+  targetUrl: urlInput,
+  maxPages: z.number().int().min(1).max(50).optional(),
+  maxDepth: z.number().int().min(0).max(5).optional(),
+  minimumDelayMs: z.number().int().min(0).max(60_000).optional()
+});
+
 export type AnalyzeRequest = z.infer<typeof analyzeRequestSchema>;
 export type CompareRequest = z.infer<typeof compareRequestSchema>;
+export type CrawlProjectRequest = z.infer<typeof crawlProjectRequestSchema>;

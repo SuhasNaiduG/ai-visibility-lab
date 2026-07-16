@@ -17,6 +17,7 @@ export interface FetchResult {
   redirectCount: number;
   redirectChain: RedirectHop[];
   networkChecks: UrlSafetyEvidence[];
+  contentType: string | null;
 }
 
 export interface FetchOptions extends CrawlerRequestOptions {
@@ -42,7 +43,8 @@ export async function fetchHtml(
   return {
     statusCode: result.statusCode,
     finalUrl: result.finalUrl,
-    html: result.value,
+    html: result.value.html,
+    contentType: result.value.contentType,
     responseTimeMs: result.responseTimeMs,
     fetchedAt: result.fetchedAt,
     redirectCount: result.redirectCount,
@@ -58,7 +60,16 @@ async function readBoundedHtml(
     finalUrl: string;
     redirectChain: readonly RedirectHop[];
   }
-): Promise<string> {
+): Promise<{ html: string; contentType: string | null }> {
+  const contentType = response.headers.get("content-type")?.split(";", 1)[0]?.trim().toLocaleLowerCase("en-US") ?? null;
+  if (contentType && !["text/html", "application/xhtml+xml"].includes(contentType)) {
+    await cancelResponseBody(response);
+    throw new CrawlerError(
+      "UNSUPPORTED_CONTENT_TYPE",
+      `Expected an HTML response but received ${contentType}`,
+      { details: { finalUrl: context.finalUrl, contentType } }
+    );
+  }
   const contentLengthHeader = response.headers.get("content-length");
   const contentLength = contentLengthHeader === null
     ? null
@@ -76,7 +87,7 @@ async function readBoundedHtml(
   }
 
   if (!response.body) {
-    return "";
+    return { html: "", contentType };
   }
 
   const reader = response.body.getReader();
@@ -105,7 +116,7 @@ async function readBoundedHtml(
     }
 
     parts.push(decoder.decode());
-    return parts.join("");
+    return { html: parts.join(""), contentType };
   } finally {
     reader.releaseLock();
   }

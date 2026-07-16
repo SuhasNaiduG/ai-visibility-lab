@@ -148,6 +148,23 @@ describe("analyzer API", () => {
     expect(analyze).toHaveBeenCalledWith("example.com");
   });
 
+  it("validates and returns a bounded crawl research project", async () => {
+    const crawl = vi.fn(async () => ({ projectId: "project-1", status: "complete", pages: [] }));
+    const projectApp = createApp({ crawl: crawl as never });
+    const response = await request(projectApp).post("/api/projects/crawl").send({
+      targetUrl: "https://example.com",
+      maxPages: 5,
+      maxDepth: 1,
+      minimumDelayMs: 0
+    });
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ projectId: "project-1", status: "complete", pages: [] });
+    expect(crawl).toHaveBeenCalledWith({ targetUrl: "https://example.com", maxPages: 5, maxDepth: 1, minimumDelayMs: 0 });
+
+    const invalid = await request(projectApp).post("/api/projects/crawl").send({ targetUrl: "https://example.com", maxPages: 51 });
+    expect(invalid.status).toBe(400);
+  });
+
   it("maps an unsupported or unsafe URL to a client-safe error", async () => {
     analyze.mockRejectedValue(new CrawlerError("PRIVATE_NETWORK_TARGET", "URL resolves to a private or non-public network address", { details: { hostname: "localhost" } }));
     const response = await request(app()).post("/api/analyze").send({ url: "http://localhost" });

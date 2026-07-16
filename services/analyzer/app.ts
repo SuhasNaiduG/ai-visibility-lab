@@ -10,6 +10,7 @@ import { normalizeUrl } from "../../packages/crawler/url.js";
 import {
   analyzeRequestSchema,
   compareRequestSchema,
+  crawlProjectRequestSchema,
   latestRunQuerySchema
 } from "../../packages/schemas/api.js";
 import {
@@ -25,11 +26,14 @@ import {
   compareAndSaveRun,
   type CompareRunInput
 } from "./compare.js";
+import { crawlSiteProject } from "./crawl.js";
+import type { CrawlResearchProject } from "../../packages/crawler/site-crawl.js";
 
 export interface AppDependencies {
   analyze: (url: string) => Promise<AnalysisResult>;
   compareAndSave: (input: CompareRunInput) => Promise<RunRecord>;
   runStore: RunStore;
+  crawl: (input: { targetUrl: string; maxPages?: number; maxDepth?: number; minimumDelayMs?: number }) => Promise<CrawlResearchProject>;
 }
 
 class ApiError extends Error {
@@ -49,6 +53,7 @@ export function createApp(overrides: Partial<AppDependencies> = {}): Express {
   const analyze = overrides.analyze ?? analyzeUrl;
   const compareAndSave = overrides.compareAndSave ?? ((input) =>
     compareAndSaveRun(input, { store: runStore, analyze }));
+  const crawl = overrides.crawl ?? ((input) => crawlSiteProject(input, { analyze }));
   const app = express();
 
   app.disable("x-powered-by");
@@ -72,6 +77,12 @@ export function createApp(overrides: Partial<AppDependencies> = {}): Express {
       throw validationError(validation.error.flatten());
     }
     response.status(200).json(await compareAndSave(validation.data));
+  }));
+
+  app.post("/api/projects/crawl", asyncHandler(async (request, response) => {
+    const validation = crawlProjectRequestSchema.safeParse(request.body);
+    if (!validation.success) throw validationError(validation.error.flatten());
+    response.status(200).json(await crawl(validation.data));
   }));
 
   app.get("/api/runs", asyncHandler(async (_request, response) => {
