@@ -298,5 +298,3 @@ function isJsonSyntaxError(error: unknown): boolean {
 function isHttpStatusError(error: unknown, status: number): boolean {
   return error instanceof Error && "status" in error && (error as Error & { status?: number }).status === status;
 }
-
-export const app = createApp();

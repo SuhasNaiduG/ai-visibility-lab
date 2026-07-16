@@ -1,0 +1,30 @@
+services:
+  - type: web
+    name: ai-visibility-lab
+    runtime: node
+    plan: starter
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    maxShutdownDelaySeconds: 30
+    envVars:
+      - key: NODE_VERSION
+        value: 24.18.0
+      - key: NODE_ENV
+        value: production
+      - key: STORAGE_ADAPTER
+        value: sqlite
+      - key: DATA_DIR
+        value: /var/data
+      - key: REQUEST_TIMEOUT_MS
+        value: 10000
+      - key: MAX_HTML_BYTES
+        value: 2000000
+      - key: SHUTDOWN_TIMEOUT_MS
+        value: 25000
+      - key: AI_INTERPRETATION_ENABLED
+        value: "false"
+    disk:
+      name: ai-visibility-data
+      mountPath: /var/data
+      sizeGB: 1
