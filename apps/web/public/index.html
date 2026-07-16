@@ -23,6 +23,7 @@
         <button class="tab" type="button" data-panel="analyze-panel">Single-site analysis</button>
         <button class="tab" type="button" data-panel="compare-panel">Competitor comparison</button>
         <button class="tab" type="button" data-panel="history-panel">Run history</button>
+        <button class="tab" type="button" data-panel="visibility-panel">Visibility observations</button>
         <button class="tab" type="button" data-panel="sources-panel">Research sources</button>
         <button class="tab" type="button" data-panel="roadmap-panel">Roadmap</button>
       </nav>
@@ -157,6 +158,34 @@
         </div>
         <div id="history-error" class="error" role="alert" hidden></div>
         <div id="history-results" class="results" aria-live="polite"></div>
+      </section>
+
+      <section id="visibility-panel" class="panel" aria-labelledby="visibility-heading" hidden>
+        <div class="panel-heading">
+          <div>
+            <p class="step">Observe manually â†’ Record context â†’ Compare intervals</p>
+            <h2 id="visibility-heading">Manual visibility observations</h2>
+          </div>
+          <p>No search engine is scraped. Record only what a researcher directly observed, with its query, context, date, and optional reference.</p>
+        </div>
+        <form id="visibility-form" class="form-grid visibility-form">
+          <label>Target URL<input name="targetUrl" type="url" maxlength="2048" required /></label>
+          <label>Query<input name="query" type="text" maxlength="500" required /></label>
+          <label>Engine or surface<input name="engine" type="text" maxlength="100" placeholder="Manual browser review" required /></label>
+          <label>Location<input name="location" type="text" maxlength="200" required /></label>
+          <label>Device<select name="device" required><option value="desktop">Desktop</option><option value="mobile">Mobile</option><option value="tablet">Tablet</option><option value="other">Other</option></select></label>
+          <label>Observation date<input name="observationDate" type="date" required /></label>
+          <label>Observed rank (optional)<input name="observedRank" type="number" min="1" max="10000" /></label>
+          <label>Citation observed (optional)<select name="observedCitation"><option value="">Not recorded</option><option value="true">Yes</option><option value="false">No</option></select></label>
+          <label>Citation URL (optional)<input name="citationUrl" type="url" maxlength="2048" /></label>
+          <label>Reference URL (optional)<input name="referenceUrl" type="url" maxlength="2048" /></label>
+          <label>Screenshot reference (optional)<input name="screenshotReference" type="text" maxlength="2048" /></label>
+          <label class="wide">Notes<textarea name="notes" maxlength="2000" rows="3"></textarea></label>
+          <button type="submit">Save manual observation</button>
+          <span class="progress" role="status" aria-live="polite"></span>
+        </form>
+        <div id="visibility-error" class="error" role="alert" hidden></div>
+        <div id="visibility-results" class="results" aria-live="polite"></div>
       </section>
 
       <section id="sources-panel" class="panel" aria-labelledby="sources-heading" hidden>

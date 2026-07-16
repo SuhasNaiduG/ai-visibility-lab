@@ -812,6 +812,40 @@ async function loadResearchSources() {
   }
 }
 
+async function loadVisibilityObservations() {
+  const results = $("#visibility-results");
+  const error = $("#visibility-error");
+  hideError(error);
+  clear(results);
+  results.append(element("p", { className: "empty", text: "Loading manual observationsâ€¦" }));
+  try {
+    const observations = await api("/api/visibility-observations");
+    hideError(error);
+    clear(results);
+    if (!observations.length) {
+      results.append(element("p", { className: "empty", text: "No manual visibility observations are saved yet. No automated provider is active." }));
+      return;
+    }
+    results.append(section("Saved manual observations", table([
+      "Date", "Target", "Query", "Engine", "Location/device", "Rank", "Citation", "Reference", "Notes"
+    ], observations.map((observation) => [
+      observation.observationDate,
+      observation.targetUrl,
+      observation.query,
+      observation.engine,
+      `${observation.location} / ${observation.device}`,
+      observation.observedRank,
+      observation.observedCitation,
+      observation.citationUrl ?? observation.referenceUrl ?? observation.screenshotReference,
+      observation.notes
+    ]))));
+    results.append(element("p", { className: "causation-limitation", text: "Website changes and observed visibility changes occurred during the same interval. This does not establish causation." }));
+  } catch (caught) {
+    clear(results);
+    showError(error, caught);
+  }
+}
+
 let historyRequestSequence = 0;
 
 function beginHistoryRequest(error) {
@@ -877,6 +911,7 @@ $$('.tab').forEach((button) => button.addEventListener("click", () => {
   });
   if (button.dataset.panel === "history-panel") loadRunHistory();
   if (button.dataset.panel === "sources-panel") loadResearchSources();
+  if (button.dataset.panel === "visibility-panel") loadVisibilityObservations();
 }));
 
 $("#crawl-form").addEventListener("submit", async (event) => {
@@ -936,8 +971,39 @@ $("#compare-form").addEventListener("submit", async (event) => {
   finally { setBusy(form, false); }
 });
 
+$("#visibility-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const error = $("#visibility-error");
+  hideError(error);
+  setBusy(form, true, "Saving the manual observation and its contextâ€¦");
+  try {
+    const values = Object.fromEntries(new FormData(form));
+    const payload = {
+      targetUrl: values.targetUrl,
+      query: values.query,
+      engine: values.engine,
+      location: values.location,
+      device: values.device,
+      observationDate: values.observationDate,
+      ...(values.observedRank ? { observedRank: Number(values.observedRank) } : {}),
+      ...(values.observedCitation !== "" ? { observedCitation: values.observedCitation === "true" } : {}),
+      ...(values.citationUrl ? { citationUrl: values.citationUrl } : {}),
+      ...(values.referenceUrl ? { referenceUrl: values.referenceUrl } : {}),
+      ...(values.screenshotReference ? { screenshotReference: values.screenshotReference } : {}),
+      ...(values.notes ? { notes: values.notes } : {})
+    };
+    await api("/api/visibility-observations", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+    await loadVisibilityObservations();
+  } catch (caught) { showError(error, caught); }
+  finally { setBusy(form, false); }
+});
+
 $("#refresh-history").addEventListener("click", loadRunHistory);
 $("#refresh-sources").addEventListener("click", loadResearchSources);
+
+const observationDate = $("#visibility-form input[name='observationDate']");
+if (!observationDate.value) observationDate.value = new Date().toISOString().slice(0, 10);
 
 api("/health").then((health) => {
   const status = $("#health-status");

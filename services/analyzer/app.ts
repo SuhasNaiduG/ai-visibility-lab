@@ -12,7 +12,9 @@ import {
   analyzeRequestSchema,
   compareRequestSchema,
   crawlProjectRequestSchema,
-  latestRunQuerySchema
+  latestRunQuerySchema,
+  manualVisibilityObservationRequestSchema,
+  visibilityObservationListQuerySchema
 } from "../../packages/schemas/api.js";
 import {
   JsonRunStore,
@@ -34,6 +36,8 @@ import { loadAiInterpretationConfig } from "../../packages/ai/config.js";
 import { AiInterpretationError, interpretEvidence } from "../../packages/ai/interpret.js";
 import { evidenceForRun } from "../../packages/ai/run-evidence.js";
 import type { AiInterpretationConfig, AiInterpretationProvider } from "../../packages/ai/types.js";
+import { JsonVisibilityObservationStore, VisibilityObservationStoreError } from "../../packages/visibility/json-observation-store.js";
+import type { VisibilityObservationStore } from "../../packages/visibility/types.js";
 
 export interface AppDependencies {
   analyze: (url: string) => Promise<AnalysisResult>;
@@ -42,6 +46,7 @@ export interface AppDependencies {
   crawl: (input: { targetUrl: string; maxPages?: number; maxDepth?: number; minimumDelayMs?: number }) => Promise<CrawlResearchProject>;
   aiProvider: AiInterpretationProvider | null;
   aiConfig: AiInterpretationConfig;
+  visibilityStore: VisibilityObservationStore;
 }
 
 class ApiError extends Error {
@@ -64,6 +69,7 @@ export function createApp(overrides: Partial<AppDependencies> = {}): Express {
   const crawl = overrides.crawl ?? ((input) => crawlSiteProject(input, { analyze }));
   const aiProvider = overrides.aiProvider ?? null;
   const aiConfig = overrides.aiConfig ?? loadAiInterpretationConfig();
+  const visibilityStore = overrides.visibilityStore ?? new JsonVisibilityObservationStore();
   const app = express();
 
   app.disable("x-powered-by");
@@ -121,6 +127,22 @@ export function createApp(overrides: Partial<AppDependencies> = {}): Express {
     if (!run) throw new ApiError(404, "RUN_NOT_FOUND", "Saved run was not found", { id });
     const result = await interpretEvidence({ evidence: evidenceForRun(run), ...validation.data }, aiProvider ?? undefined, aiConfig);
     response.status(200).json(result);
+  }));
+
+  app.get("/api/visibility-providers", (_request, response) => {
+    response.status(200).json({ manualEntryEnabled: true, providers: [] });
+  });
+
+  app.post("/api/visibility-observations", asyncHandler(async (request, response) => {
+    const validation = manualVisibilityObservationRequestSchema.safeParse(request.body);
+    if (!validation.success) throw validationError(validation.error.flatten());
+    response.status(201).json(await visibilityStore.save(validation.data));
+  }));
+
+  app.get("/api/visibility-observations", asyncHandler(async (request, response) => {
+    const validation = visibilityObservationListQuerySchema.safeParse({ targetUrl: request.query.targetUrl });
+    if (!validation.success) throw validationError(validation.error.flatten());
+    response.status(200).json(await visibilityStore.list(validation.data.targetUrl));
   }));
 
   app.get("/api/runs", asyncHandler(async (_request, response) => {
@@ -217,6 +239,9 @@ function mapError(error: unknown, request?: Pick<Request, "method" | "path">): A
       : error.code === "AI_PROVIDER_ERROR" ? 502
       : 422;
     return new ApiError(status, error.code, error.message, error.details);
+  }
+  if (error instanceof VisibilityObservationStoreError) {
+    return new ApiError(500, "VISIBILITY_STORE_ERROR", "Manual visibility observations are unavailable", { code: error.code, ...error.details });
   }
   if (isJsonSyntaxError(error)) {
     return new ApiError(400, "INVALID_JSON", "Request body contains invalid JSON");

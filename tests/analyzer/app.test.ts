@@ -12,6 +12,7 @@ import type { AnalysisResult } from "../../services/analyzer/analyze.js";
 import type { CompareRunInput } from "../../services/analyzer/compare.js";
 import { makeAnalysis, makeComparison } from "../helpers/analysis.js";
 import type { AiInterpretationConfig, AiInterpretationProvider } from "../../packages/ai/types.js";
+import { JsonVisibilityObservationStore } from "../../packages/visibility/json-observation-store.js";
 
 const pageUrl = "https://example.com/";
 const parsed = parsePage(`<!doctype html><html lang="en"><head>
@@ -296,6 +297,34 @@ describe("analyzer API", () => {
     const response = await request(app()).post("/api/runs/run-1/interpretations").send({});
     expect(response.status).toBe(503);
     expect(response.body.error).toEqual(expect.objectContaining({ code: "AI_NOT_CONFIGURED" }));
+  });
+
+  it("saves and lists manual visibility observations while reporting no active providers", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "ai-visibility-api-observations-"));
+    const visibilityStore = new JsonVisibilityObservationStore(join(directory, "observations.json"), {
+      idFactory: () => "observation-1",
+      clock: () => new Date("2026-07-16T00:00:00.000Z")
+    });
+    const observationApp = createApp({ visibilityStore });
+    const payload = {
+      targetUrl: "https://example.com",
+      query: "example query",
+      engine: "Manual browser review",
+      location: "Seattle, WA",
+      device: "desktop",
+      observationDate: "2026-07-16",
+      observedRank: 3,
+      observedCitation: false,
+      notes: "Observed manually."
+    };
+    const saved = await request(observationApp).post("/api/visibility-observations").send(payload);
+    expect(saved.status).toBe(201);
+    expect(saved.body).toEqual(expect.objectContaining({ id: "observation-1", source: "manual", observedRank: 3 }));
+    const listed = await request(observationApp).get("/api/visibility-observations?targetUrl=https%3A%2F%2Fexample.com");
+    expect(listed.status).toBe(200);
+    expect(listed.body).toEqual([saved.body]);
+    const providers = await request(observationApp).get("/api/visibility-providers");
+    expect(providers.body).toEqual({ manualEntryEnabled: true, providers: [] });
   });
 
   it("distinguishes a completed comparison save failure from a history loading failure", async () => {

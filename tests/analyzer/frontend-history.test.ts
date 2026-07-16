@@ -153,7 +153,7 @@ describe("demo implementation and verification UI", () => {
     const source = await readFile(new URL("../../apps/web/public/app.js", import.meta.url), "utf8");
     const html = await readFile(new URL("../../apps/web/public/index.html", import.meta.url), "utf8");
 
-    for (const panel of ["projects-panel", "analyze-panel", "compare-panel", "history-panel", "sources-panel", "roadmap-panel"]) {
+    for (const panel of ["projects-panel", "analyze-panel", "compare-panel", "history-panel", "visibility-panel", "sources-panel", "roadmap-panel"]) {
       expect(html).toContain(`id="${panel}"`);
     }
     expect(source).toContain('section("Crawl Explorer"');
@@ -161,6 +161,8 @@ describe("demo implementation and verification UI", () => {
     expect(source).toContain('section("Implementation workspace"');
     expect(source).toContain('section("Fixture verification"');
     expect(source).toContain('/api/research-sources');
+    expect(source).toContain('/api/visibility-observations');
+    expect(html).toContain("No search engine is scraped");
   });
 });
 

@@ -82,7 +82,31 @@ export const aiInterpretationRequestSchema = z.strictObject({
   focus: z.string().trim().min(1).max(1_000).optional()
 });
 
+export const manualVisibilityObservationRequestSchema = z.strictObject({
+  targetUrl: urlInput,
+  query: z.string().trim().min(1).max(500),
+  engine: z.string().trim().min(1).max(100),
+  location: z.string().trim().min(1).max(200),
+  device: z.enum(["desktop", "mobile", "tablet", "other"]),
+  observationDate: z.iso.date(),
+  observedRank: z.number().int().min(1).max(10_000).optional(),
+  observedCitation: z.boolean().optional(),
+  citationUrl: z.url().optional(),
+  notes: z.string().trim().max(2_000).optional(),
+  screenshotReference: z.string().trim().max(2_048).optional(),
+  referenceUrl: z.url().optional()
+}).superRefine((value, context) => {
+  if (value.observedRank === undefined && value.observedCitation === undefined) {
+    context.addIssue({ code: "custom", path: ["observedRank"], message: "Record a rank, citation observation, or both" });
+  }
+});
+
+export const visibilityObservationListQuerySchema = z.strictObject({
+  targetUrl: urlInput.optional()
+});
+
 export type AnalyzeRequest = z.infer<typeof analyzeRequestSchema>;
 export type CompareRequest = z.infer<typeof compareRequestSchema>;
 export type CrawlProjectRequest = z.infer<typeof crawlProjectRequestSchema>;
 export type AiInterpretationRequest = z.infer<typeof aiInterpretationRequestSchema>;
+export type ManualVisibilityObservationRequest = z.infer<typeof manualVisibilityObservationRequestSchema>;
