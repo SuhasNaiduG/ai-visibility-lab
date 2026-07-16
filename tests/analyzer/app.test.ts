@@ -11,6 +11,7 @@ import { createApp } from "../../services/analyzer/app.js";
 import type { AnalysisResult } from "../../services/analyzer/analyze.js";
 import type { CompareRunInput } from "../../services/analyzer/compare.js";
 import { makeAnalysis, makeComparison } from "../helpers/analysis.js";
+import type { AiInterpretationConfig, AiInterpretationProvider } from "../../packages/ai/types.js";
 
 const pageUrl = "https://example.com/";
 const parsed = parsePage(`<!doctype html><html lang="en"><head>
@@ -238,6 +239,63 @@ describe("analyzer API", () => {
       expect.objectContaining({ sourceId: "RFC-9309", sourceType: "internet-standard" }),
       expect.objectContaining({ sourceType: "internal-heuristic", url: null })
     ]));
+  });
+
+  it("reports optional AI as disabled while deterministic analysis remains available", async () => {
+    const response = await request(app()).get("/api/ai/status");
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual(expect.objectContaining({ enabled: false, deterministicAnalysisAvailable: true }));
+  });
+
+  it("regenerates a schema-validated interpretation from a saved run with a mock provider", async () => {
+    const saved = runRecord();
+    saved.analyses[0]!.findings = [{
+      ruleId: "TEST_RULE",
+      ruleVersion: "1.0.0",
+      category: "metadata",
+      problem: "Test finding",
+      evidence: [{ sourceUrl: saved.targetUrl, field: "title", observedValue: null, fetchedAt: "2026-07-15T00:00:00.000Z" }],
+      whyItMatters: "Test",
+      exactImplementation: "Review",
+      expectedOutcome: "Observed change",
+      verificationMethod: "Rerun",
+      priority: "medium",
+      effort: "low",
+      classification: "observation",
+      confidence: "high",
+      limitation: "Test limitation"
+    }];
+    store.records = [saved];
+    const evidenceId = "run-1:analysis:0:finding:TEST_RULE:0";
+    const provider: AiInterpretationProvider = {
+      providerId: "mock",
+      generate: vi.fn(async (providerRequest) => ({
+        model: "mock-model",
+        output: {
+          summary: "Review the deterministic title finding.",
+          clusters: [{ label: "Metadata", evidenceIds: [providerRequest.evidence[0]!.evidenceId] }],
+          researchQuestions: [],
+          priorities: [{ findingId: "TEST_RULE", rationale: "Supplied evidence shows the finding.", evidenceIds: [providerRequest.evidence[0]!.evidenceId] }],
+          citations: [providerRequest.evidence[0]!.evidenceId],
+          warnings: []
+        }
+      }))
+    };
+    const aiConfig: AiInterpretationConfig = { enabled: true, provider: "mock", model: "mock-model", timeoutMs: 1_000, maxOutputTokens: 500, maxEvidenceItems: 10, maxInputCharacters: 10_000 };
+    const response = await request(createApp({ runStore: store, aiProvider: provider, aiConfig }))
+      .post("/api/runs/run-1/interpretations")
+      .send({ focus: "Explain metadata" });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual(expect.objectContaining({ provider: "mock", model: "mock-model", citations: [evidenceId] }));
+    expect(provider.generate).toHaveBeenCalledWith(expect.objectContaining({ focus: "Explain metadata", evidence: [expect.objectContaining({ evidenceId })] }), expect.any(AbortSignal));
+  });
+
+  it("returns a clear error when optional AI is not configured", async () => {
+    store.records = [runRecord()];
+    const response = await request(app()).post("/api/runs/run-1/interpretations").send({});
+    expect(response.status).toBe(503);
+    expect(response.body.error).toEqual(expect.objectContaining({ code: "AI_NOT_CONFIGURED" }));
   });
 
   it("distinguishes a completed comparison save failure from a history loading failure", async () => {

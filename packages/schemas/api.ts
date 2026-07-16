@@ -78,6 +78,11 @@ export const crawlProjectRequestSchema = z.strictObject({
   minimumDelayMs: z.number().int().min(0).max(60_000).optional()
 });
 
+export const aiInterpretationRequestSchema = z.strictObject({
+  focus: z.string().trim().min(1).max(1_000).optional()
+});
+
 export type AnalyzeRequest = z.infer<typeof analyzeRequestSchema>;
 export type CompareRequest = z.infer<typeof compareRequestSchema>;
 export type CrawlProjectRequest = z.infer<typeof crawlProjectRequestSchema>;
+export type AiInterpretationRequest = z.infer<typeof aiInterpretationRequestSchema>;

@@ -8,6 +8,7 @@ import express, {
 import { CrawlerError } from "../../packages/crawler/errors.js";
 import { normalizeUrl } from "../../packages/crawler/url.js";
 import {
+  aiInterpretationRequestSchema,
   analyzeRequestSchema,
   compareRequestSchema,
   crawlProjectRequestSchema,
@@ -29,12 +30,18 @@ import {
 import { crawlSiteProject } from "./crawl.js";
 import type { CrawlResearchProject } from "../../packages/crawler/site-crawl.js";
 import { researchSources, RESEARCH_SOURCE_REGISTRY_VERSION } from "../../packages/research/sources.js";
+import { loadAiInterpretationConfig } from "../../packages/ai/config.js";
+import { AiInterpretationError, interpretEvidence } from "../../packages/ai/interpret.js";
+import { evidenceForRun } from "../../packages/ai/run-evidence.js";
+import type { AiInterpretationConfig, AiInterpretationProvider } from "../../packages/ai/types.js";
 
 export interface AppDependencies {
   analyze: (url: string) => Promise<AnalysisResult>;
   compareAndSave: (input: CompareRunInput) => Promise<RunRecord>;
   runStore: RunStore;
   crawl: (input: { targetUrl: string; maxPages?: number; maxDepth?: number; minimumDelayMs?: number }) => Promise<CrawlResearchProject>;
+  aiProvider: AiInterpretationProvider | null;
+  aiConfig: AiInterpretationConfig;
 }
 
 class ApiError extends Error {
@@ -55,6 +62,8 @@ export function createApp(overrides: Partial<AppDependencies> = {}): Express {
   const compareAndSave = overrides.compareAndSave ?? ((input) =>
     compareAndSaveRun(input, { store: runStore, analyze }));
   const crawl = overrides.crawl ?? ((input) => crawlSiteProject(input, { analyze }));
+  const aiProvider = overrides.aiProvider ?? null;
+  const aiConfig = overrides.aiConfig ?? loadAiInterpretationConfig();
   const app = express();
 
   app.disable("x-powered-by");
@@ -92,6 +101,27 @@ export function createApp(overrides: Partial<AppDependencies> = {}): Express {
       sources: researchSources
     });
   });
+
+  app.get("/api/ai/status", (_request, response) => {
+    response.status(200).json({
+      enabled: aiConfig.enabled && aiProvider !== null,
+      configuredProvider: aiConfig.provider,
+      configuredModel: aiConfig.model,
+      deterministicAnalysisAvailable: true
+    });
+  });
+
+  app.post("/api/runs/:id/interpretations", asyncHandler(async (request, response) => {
+    const rawId = request.params.id;
+    const id = Array.isArray(rawId) ? "" : rawId?.trim();
+    if (!id || id.length > 200) throw validationError({ fieldErrors: { id: ["A valid run ID is required"] } });
+    const validation = aiInterpretationRequestSchema.safeParse(request.body ?? {});
+    if (!validation.success) throw validationError(validation.error.flatten());
+    const run = await runStore.get(id);
+    if (!run) throw new ApiError(404, "RUN_NOT_FOUND", "Saved run was not found", { id });
+    const result = await interpretEvidence({ evidence: evidenceForRun(run), ...validation.data }, aiProvider ?? undefined, aiConfig);
+    response.status(200).json(result);
+  }));
 
   app.get("/api/runs", asyncHandler(async (_request, response) => {
     response.status(200).json(await runStore.list());
@@ -180,6 +210,13 @@ function mapError(error: unknown, request?: Pick<Request, "method" | "path">): A
         : "Run history is unavailable",
       { code: error.code, ...error.details }
     );
+  }
+  if (error instanceof AiInterpretationError) {
+    const status = error.code === "AI_NOT_CONFIGURED" ? 503
+      : error.code === "AI_TIMEOUT" ? 504
+      : error.code === "AI_PROVIDER_ERROR" ? 502
+      : 422;
+    return new ApiError(status, error.code, error.message, error.details);
   }
   if (isJsonSyntaxError(error)) {
     return new ApiError(400, "INVALID_JSON", "Request body contains invalid JSON");

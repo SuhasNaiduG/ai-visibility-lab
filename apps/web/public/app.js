@@ -451,6 +451,43 @@ function renderRunVerification(report) {
   ]);
 }
 
+function renderOptionalAiInterpretation(run) {
+  const output = element("div", { className: "ai-interpretation-output" });
+  const button = element("button", { className: "secondary", text: "Generate optional interpretation", attributes: { type: "button" } });
+  button.addEventListener("click", async () => {
+    button.disabled = true;
+    clear(output);
+    output.append(element("p", { className: "empty", text: "Checking configuration and grounding the request in saved evidenceâ€¦" }));
+    try {
+      const status = await api("/api/ai/status");
+      if (!status.enabled) throw new Error("Optional AI interpretation is not configured. Deterministic evidence and proposals remain fully available.");
+      const interpretation = await api(`/api/runs/${encodeURIComponent(run.id)}/interpretations`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({})
+      });
+      clear(output);
+      output.append(
+        labelled("AI summary", interpretation.summary),
+        labelled("Evidence citations", interpretation.citations),
+        labelled("Provider/model", `${interpretation.provider} / ${interpretation.model}`),
+        element("ul", { className: "plain-list" }, (interpretation.warnings ?? []).map((warning) => element("li", { text: warning }))),
+        jsonDetails(interpretation, "Complete schema-validated interpretation")
+      );
+    } catch (caught) {
+      clear(output);
+      output.append(element("p", { className: "error", text: caught instanceof Error ? caught.message : String(caught) }));
+    } finally {
+      button.disabled = false;
+    }
+  });
+  return element("div", { className: "optional-ai" }, [
+    element("p", { text: "Optional AI interpretation is provider-neutral, disabled by default, and may only summarize saved deterministic evidence IDs. It never overwrites findings." }),
+    button,
+    output
+  ]);
+}
+
 function analysisForSite(run, entry) {
   const analyses = run.analyses ?? [];
   const direct = analyses[entry.site.inputOrder];
@@ -666,6 +703,7 @@ function renderComparison(run, container) {
   container.append(section("Implementation workspace", renderImplementationWorkspace(comparison.implementationArtifacts ?? []), { className: "implementation-section" }));
   container.append(section("Fixture verification", renderFixtureVerification(), { className: "verification-section" }));
   if (run.verification) container.append(section("Later-run verification", renderRunVerification(run.verification), { className: "verification-section" }));
+  if (run.id) container.append(section("Optional evidence-grounded AI interpretation", renderOptionalAiInterpretation(run)));
   if (run.history) container.append(section("Changes since the prior matching run", [
     metricCards([["Technical", run.history.technicalChanges?.length ?? 0], ["Metadata", run.history.metadataChanges?.length ?? 0], ["Schema", run.history.schemaChanges?.length ?? 0], ["Headings", run.history.headingChanges?.length ?? 0], ["Content", run.history.contentCountChanges?.length ?? 0], ["Links/media", run.history.linkAndMediaChanges?.length ?? 0]]),
     element("p", { text: run.history.correlationSummary?.interpretation }),
