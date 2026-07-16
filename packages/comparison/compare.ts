@@ -109,8 +109,8 @@ const scalarRules: ScalarRule[] = [
 ];
 
 export function compareAnalyses(input: ComparisonInput): ComparisonResult {
-  if (input.competitors.length < 1 || input.competitors.length > 3) {
-    throw new Error("Comparison requires one to three competitors");
+  if (input.competitors.length < 1 || input.competitors.length > 5) {
+    throw new Error("Comparison requires one to five competitors");
   }
 
   const all = [input.target, ...input.competitors];

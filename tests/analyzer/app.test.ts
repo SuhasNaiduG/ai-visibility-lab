@@ -206,7 +206,19 @@ describe("analyzer API", () => {
       rankObservations: { "example.com": 8, "https://example.com/": 7 }
     });
     expect(duplicateRankAlias.status).toBe(400);
+    const tooMany = await request(app()).post("/api/compare").send({
+      targetUrl: pageUrl,
+      competitorUrls: [1, 2, 3, 4, 5, 6].map((index) => `https://competitor-${index}.example/`)
+    });
+    expect(tooMany.status).toBe(400);
+    expect(tooMany.body.error.details.fieldErrors.competitorUrls[0]).toMatch(/five/i);
     expect(compareAndSave).not.toHaveBeenCalled();
+  });
+
+  it("accepts five competitors in submitted order", async () => {
+    const competitorUrls = [1, 2, 3, 4, 5].map((index) => `https://competitor-${index}.example/`);
+    await request(app()).post("/api/compare").send({ targetUrl: pageUrl, competitorUrls });
+    expect(compareAndSave).toHaveBeenCalledWith({ targetUrl: pageUrl, competitorUrls });
   });
 
   it("runs and returns a saved comparison", async () => {

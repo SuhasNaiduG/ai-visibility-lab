@@ -10,7 +10,7 @@ export const analyzeRequestSchema = z.strictObject({
 
 export const compareRequestSchema = z.strictObject({
   targetUrl: urlInput,
-  competitorUrls: z.array(urlInput).min(1, "At least one competitor is required").max(3, "At most three competitors are allowed"),
+  competitorUrls: z.array(urlInput).min(1, "At least one competitor is required").max(5, "At most five competitors are allowed"),
   queryLabel: z.string().trim().max(200).optional(),
   rankObservations: z.record(z.string().max(2_048), rankPosition).optional()
 }).superRefine((value, context) => {

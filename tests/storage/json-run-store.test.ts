@@ -257,7 +257,7 @@ describe("JsonRunStore", () => {
     await expect(store.list()).resolves.toEqual([]);
   });
 
-  it("preserves the submitted order of three competitors in records and summaries", async () => {
+  it("preserves the submitted order of five competitors in records and summaries", async () => {
     const { file } = await temporaryStore();
     const store = new JsonRunStore(file, {
       idFactory: () => "ordered-run",
@@ -266,7 +266,9 @@ describe("JsonRunStore", () => {
     const input = newRunInput([
       "https://zeta.example/",
       "https://alpha.example/",
-      "https://middle.example/"
+      "https://middle.example/",
+      "https://fourth.example/",
+      "https://fifth.example/"
     ]);
 
     const saved = await store.save(input);

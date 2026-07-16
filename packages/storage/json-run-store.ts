@@ -164,7 +164,7 @@ const comparisonEligibilitySchema = z.strictObject({
 
 const comparisonSiteSchema = z.strictObject({
   role: z.enum(["target", "competitor"]),
-  inputOrder: z.number().int().min(0).max(3),
+  inputOrder: z.number().int().min(0).max(5),
   inputUrl: z.string().trim().min(1).max(2_048),
   normalizedUrl: httpUrlSchema,
   finalUrl: httpUrlSchema,
@@ -178,7 +178,7 @@ const legacyComparisonSiteSchema = comparisonSiteSchema.extend({
 const competitorEvidenceSchema = z.looseObject({
   sourceUrl: httpUrlSchema,
   normalizedUrl: httpUrlSchema,
-  inputOrder: z.number().int().min(1).max(3),
+  inputOrder: z.number().int().min(1).max(5),
   observedValue: z.unknown(),
   benchmark: z.boolean(),
   evidence: z.array(evidenceSchema).min(1)
@@ -186,7 +186,7 @@ const competitorEvidenceSchema = z.looseObject({
 
 const legacyCompetitorEvidenceSchema = competitorEvidenceSchema.extend({
   normalizedUrl: httpUrlSchema.optional(),
-  inputOrder: z.number().int().min(0).max(3).optional(),
+  inputOrder: z.number().int().min(0).max(5).optional(),
   observedValue: z.unknown().optional(),
   benchmark: z.boolean().optional(),
   evidence: z.array(evidenceSchema)
@@ -237,7 +237,7 @@ const metricDefinitionSchema = z.looseObject({
 
 const comparisonRowSchema = z.looseObject({
   role: z.enum(["target", "competitor"]),
-  inputOrder: z.number().int().min(0).max(3),
+  inputOrder: z.number().int().min(0).max(5),
   inputUrl: z.string().trim().min(1).max(2_048),
   url: httpUrlSchema,
   finalUrl: httpUrlSchema,
@@ -250,7 +250,7 @@ const comparisonRowSchema = z.looseObject({
 });
 
 const legacyComparisonRowSchema = comparisonRowSchema.extend({
-  inputOrder: z.number().int().min(0).max(3).optional(),
+  inputOrder: z.number().int().min(0).max(5).optional(),
   inputUrl: z.string().trim().min(1).max(2_048).optional(),
   eligibility: comparisonEligibilitySchema.optional()
 });
@@ -272,14 +272,14 @@ const legacyTargetAdvantageSchema = targetAdvantageSchema.extend({
 
 const comparisonSchema = z.looseObject({
   targetUrl: httpUrlSchema,
-  competitorUrls: z.array(httpUrlSchema).min(1).max(3),
-  sites: z.array(comparisonSiteSchema).min(2).max(4),
+  competitorUrls: z.array(httpUrlSchema).min(1).max(5),
+  sites: z.array(comparisonSiteSchema).min(2).max(6),
   conclusionStatus: z.enum(["complete", "partial", "unavailable"]),
   incompleteMessage: z.string().min(1).nullable(),
   excludedCompetitorUrls: z.array(httpUrlSchema),
   queryLabel: z.string().nullable(),
   metricDefinitions: z.array(metricDefinitionSchema),
-  matrix: z.array(comparisonRowSchema).min(2).max(4),
+  matrix: z.array(comparisonRowSchema).min(2).max(6),
   targetGaps: z.array(comparisonGapSchema),
   targetAdvantages: z.array(targetAdvantageSchema),
   competitorOnlySchemaTypes: z.array(z.string()),
@@ -289,11 +289,11 @@ const comparisonSchema = z.looseObject({
 });
 
 const legacyComparisonSchema = comparisonSchema.extend({
-  sites: z.array(legacyComparisonSiteSchema).min(2).max(4).optional(),
+  sites: z.array(legacyComparisonSiteSchema).min(2).max(6).optional(),
   conclusionStatus: z.enum(["complete", "partial", "unavailable"]).optional(),
   incompleteMessage: z.string().min(1).nullable().optional(),
   excludedCompetitorUrls: z.array(httpUrlSchema).optional(),
-  matrix: z.array(legacyComparisonRowSchema).min(2).max(4),
+  matrix: z.array(legacyComparisonRowSchema).min(2).max(6),
   targetGaps: z.array(legacyComparisonGapSchema),
   targetAdvantages: z.array(legacyTargetAdvantageSchema)
 });
@@ -308,14 +308,14 @@ const observedChangeSchema = z.looseObject({
   currentValue: z.unknown(),
   value: z.unknown().optional(),
   siteKey: httpUrlSchema,
-  inputOrder: z.number().int().min(0).max(3),
+  inputOrder: z.number().int().min(0).max(5),
   previousSourceUrl: httpUrlSchema,
   currentSourceUrl: httpUrlSchema
 });
 
 const legacyObservedChangeSchema = observedChangeSchema.extend({
   siteKey: httpUrlSchema.optional(),
-  inputOrder: z.number().int().min(0).max(3).optional(),
+  inputOrder: z.number().int().min(0).max(5).optional(),
   previousSourceUrl: httpUrlSchema.optional(),
   currentSourceUrl: httpUrlSchema.optional()
 });
@@ -323,7 +323,7 @@ const legacyObservedChangeSchema = observedChangeSchema.extend({
 const findingChangeSchema = z.looseObject({
   sourceUrl: httpUrlSchema,
   siteKey: httpUrlSchema,
-  inputOrder: z.number().int().min(0).max(3),
+  inputOrder: z.number().int().min(0).max(5),
   previousSourceUrl: httpUrlSchema,
   currentSourceUrl: httpUrlSchema,
   newRuleIds: z.array(z.string()),
@@ -334,7 +334,7 @@ const findingChangeSchema = z.looseObject({
 
 const legacyFindingChangeSchema = findingChangeSchema.extend({
   siteKey: httpUrlSchema.optional(),
-  inputOrder: z.number().int().min(0).max(3).optional(),
+  inputOrder: z.number().int().min(0).max(5).optional(),
   previousSourceUrl: httpUrlSchema.optional(),
   currentSourceUrl: httpUrlSchema.optional(),
   indeterminateRuleIds: z.array(z.string()).optional()
@@ -346,8 +346,8 @@ const competitorOrderingSchema = z.strictObject({
   orderChanged: z.boolean(),
   moves: z.array(z.strictObject({
     normalizedUrl: httpUrlSchema,
-    previousInputOrder: z.number().int().min(1).max(3),
-    currentInputOrder: z.number().int().min(1).max(3)
+    previousInputOrder: z.number().int().min(1).max(5),
+    currentInputOrder: z.number().int().min(1).max(5)
   }))
 });
 
@@ -412,18 +412,18 @@ const runRecordSchema = z.looseObject({
   schemaVersion: z.literal(STORAGE_SCHEMA_VERSION),
   applicationVersion: z.string().min(1),
   targetUrl: httpUrlSchema,
-  competitorUrls: z.array(httpUrlSchema).min(1).max(3),
-  sites: z.array(comparisonSiteSchema).min(2).max(4),
+  competitorUrls: z.array(httpUrlSchema).min(1).max(5),
+  sites: z.array(comparisonSiteSchema).min(2).max(6),
   queryLabel: z.string().max(200).nullable(),
   rankObservations: z.record(httpUrlSchema, z.number().int().min(1).max(1_000)),
-  analyses: z.array(analysisSchema).min(2).max(4),
+  analyses: z.array(analysisSchema).min(2).max(6),
   comparison: comparisonSchema,
   history: historySchema.nullable()
 });
 
 const legacyRunRecordSchema = runRecordSchema.extend({
-  sites: z.array(legacyComparisonSiteSchema).min(2).max(4).optional(),
-  analyses: z.array(legacyAnalysisSchema).min(2).max(4),
+  sites: z.array(legacyComparisonSiteSchema).min(2).max(6).optional(),
+  analyses: z.array(legacyAnalysisSchema).min(2).max(6),
   comparison: legacyComparisonSchema,
   history: legacyHistorySchema.nullable()
 });

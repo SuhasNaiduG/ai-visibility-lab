@@ -90,12 +90,14 @@ describe("compareAnalyses", () => {
     expect(result.limitations.join(" ")).toMatch(/not proof|cannot see|does not measure/i);
   });
 
-  it("rejects comparisons outside the one-to-three competitor limit", () => {
-    expect(() => compareAnalyses({ target: makeAnalysis("https://target.example/"), competitors: [] })).toThrow("one to three");
+  it("accepts five competitors and rejects comparisons outside the one-to-five limit", () => {
+    expect(() => compareAnalyses({ target: makeAnalysis("https://target.example/"), competitors: [] })).toThrow("one to five");
+    const five = [1, 2, 3, 4, 5].map((value) => makeAnalysis(`https://competitor-${value}.example/`));
+    expect(compareAnalyses({ target: makeAnalysis("https://target.example/"), competitors: five }).matrix.map((row) => row.inputOrder)).toEqual([0, 1, 2, 3, 4, 5]);
     expect(() => compareAnalyses({
       target: makeAnalysis("https://target.example/"),
-      competitors: [1, 2, 3, 4].map((value) => makeAnalysis(`https://competitor-${value}.example/`))
-    })).toThrow("one to three");
+      competitors: [1, 2, 3, 4, 5, 6].map((value) => makeAnalysis(`https://competitor-${value}.example/`))
+    })).toThrow("one to five");
   });
 
   it("uses the strongest observed benchmark across multiple competitors", () => {

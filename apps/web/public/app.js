@@ -729,7 +729,7 @@ $("#compare-form").addEventListener("submit", async (event) => {
   setBusy(form, true, "Analyzing each site through the same evidence pipeline…");
   try {
     const values = Object.fromEntries(new FormData(form));
-    const competitors = [1, 2, 3].map((index) => ({
+    const competitors = [1, 2, 3, 4, 5].map((index) => ({
       url: String(values[`competitorUrl${index}`] ?? "").trim(),
       rank: values[`competitorRank${index}`]
     })).filter((entry) => entry.url);

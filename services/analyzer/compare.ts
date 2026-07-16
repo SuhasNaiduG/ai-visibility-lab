@@ -36,8 +36,8 @@ export async function compareAndSaveRun(
   const target = analyses[0];
   const competitors = analyses.slice(1);
 
-  if (!target || competitors.length < 1 || competitors.length > 3) {
-    throw new Error("Comparison requires one target and one to three competitors");
+  if (!target || competitors.length < 1 || competitors.length > 5) {
+    throw new Error("Comparison requires one target and one to five competitors");
   }
   analyses.forEach((analysis, index) => {
     if (analysis.normalizedUrl !== sites[index]?.normalizedUrl) {

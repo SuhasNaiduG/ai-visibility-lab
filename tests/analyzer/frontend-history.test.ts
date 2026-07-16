@@ -139,6 +139,15 @@ describe("demo implementation and verification UI", () => {
     expect(source).toContain("CANONICAL_MISMATCH");
     expect(source).toContain("INTERNAL_LINKS_LOW");
   });
+
+  it("submits all five optional competitor fields", async () => {
+    const source = await readFile(new URL("../../apps/web/public/app.js", import.meta.url), "utf8");
+    const html = await readFile(new URL("../../apps/web/public/index.html", import.meta.url), "utf8");
+
+    expect(source).toContain("[1, 2, 3, 4, 5].map");
+    expect(html).toContain('name="competitorUrl5"');
+    expect(html).toContain('name="competitorRank5"');
+  });
 });
 
 function findByClass(node: FakeNode, className: string): FakeNode | undefined {
