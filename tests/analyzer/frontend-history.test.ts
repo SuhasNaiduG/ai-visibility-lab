@@ -166,6 +166,9 @@ describe("demo implementation and verification UI", () => {
     expect(source).toContain("Filter findings by category");
     expect(html).toContain("Skip to research workspace");
     expect(html).toContain('role="tablist"');
+    expect(html).toContain("Project → Crawl → Evidence");
+    expect(html).toContain("SQLite durable storage is available now");
+    expect(html).not.toContain("â†’");
     expect(`${source}\n${html}`).not.toMatch(/Ã|â€¦|â€”|Â/u);
   });
 });
