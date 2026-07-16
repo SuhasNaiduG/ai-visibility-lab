@@ -640,15 +640,7 @@ export class JsonRunStore implements RunStore {
       schemaVersion: STORAGE_SCHEMA_VERSION,
       applicationVersion: APPLICATION_VERSION
     };
-    const recordValidation = runRecordSchema.safeParse(record);
-    if (!recordValidation.success) {
-      throw new RunStoreError("INVALID_RECORD", "Run record failed validation and was not saved", { issues: recordValidation.error.issues });
-    }
-    const validatedRecord = recordValidation.data as unknown as RunRecord;
-    const alignmentIssues = recordAlignmentIssues(validatedRecord);
-    if (alignmentIssues.length > 0) {
-      throw new RunStoreError("INVALID_RECORD", "Run record identities are inconsistent and were not saved", { issues: alignmentIssues });
-    }
+    const validatedRecord = validateRunRecord(record);
 
     let saved!: RunRecord;
     const operation = this.writeQueue.then(async () => {
@@ -656,10 +648,7 @@ export class JsonRunStore implements RunStore {
       const previousRun = validatedRecord.history
         ? file.runs.find((run) => run.id === validatedRecord.history?.previousRunId)
         : undefined;
-      const persistedAlignmentIssues = recordAlignmentIssues(validatedRecord, previousRun, true);
-      if (persistedAlignmentIssues.length > 0) {
-        throw new RunStoreError("INVALID_RECORD", "Run record history is inconsistent and was not saved", { issues: persistedAlignmentIssues });
-      }
+      validateRunRecord(validatedRecord, previousRun, true);
       file.runs.push(validatedRecord);
       await this.writeStore(file);
       saved = validatedRecord;
@@ -782,6 +771,21 @@ function normalizeLegacyRuns(runs: LegacyRunRecord[]): RunRecord[] {
         : record.verification
     };
   });
+}
+
+export function validateRunRecord(record: unknown, previousRun?: RunRecord, requirePreviousRun = false): RunRecord {
+  const validation = runRecordSchema.safeParse(record);
+  if (!validation.success) {
+    throw new RunStoreError("INVALID_RECORD", "Run record failed validation and was not saved", { issues: validation.error.issues });
+  }
+  const validated = validation.data as unknown as RunRecord;
+  const alignmentIssues = recordAlignmentIssues(validated, previousRun, requirePreviousRun);
+  if (alignmentIssues.length > 0) {
+    throw new RunStoreError("INVALID_RECORD", requirePreviousRun
+      ? "Run record history is inconsistent and was not saved"
+      : "Run record identities are inconsistent and were not saved", { issues: alignmentIssues });
+  }
+  return validated;
 }
 
 function normalizeLegacyRun(run: LegacyRunRecord): {

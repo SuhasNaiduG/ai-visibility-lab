@@ -43,4 +43,6 @@ export interface RunStore {
   get(id: string): Promise<RunRecord | null>;
   list(): Promise<RunSummary[]>;
   findLatestByTarget(targetUrl: string, excludeId?: string): Promise<RunRecord | null>;
+  saveCrawlProject?(project: unknown): Promise<void>;
+  saveAiInterpretation?(runId: string, interpretation: unknown): Promise<void>;
 }

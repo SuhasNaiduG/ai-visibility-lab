@@ -38,6 +38,7 @@ import { evidenceForRun } from "../../packages/ai/run-evidence.js";
 import type { AiInterpretationConfig, AiInterpretationProvider } from "../../packages/ai/types.js";
 import { JsonVisibilityObservationStore, VisibilityObservationStoreError } from "../../packages/visibility/json-observation-store.js";
 import type { VisibilityObservationStore } from "../../packages/visibility/types.js";
+import { SqliteRunStore } from "../../packages/storage/sqlite-run-store.js";
 
 export interface AppDependencies {
   analyze: (url: string) => Promise<AnalysisResult>;
@@ -62,7 +63,7 @@ class ApiError extends Error {
 }
 
 export function createApp(overrides: Partial<AppDependencies> = {}): Express {
-  const runStore = overrides.runStore ?? new JsonRunStore();
+  const runStore = overrides.runStore ?? createDefaultRunStore();
   const analyze = overrides.analyze ?? analyzeUrl;
   const compareAndSave = overrides.compareAndSave ?? ((input) =>
     compareAndSaveRun(input, { store: runStore, analyze }));
@@ -98,7 +99,9 @@ export function createApp(overrides: Partial<AppDependencies> = {}): Express {
   app.post("/api/projects/crawl", asyncHandler(async (request, response) => {
     const validation = crawlProjectRequestSchema.safeParse(request.body);
     if (!validation.success) throw validationError(validation.error.flatten());
-    response.status(200).json(await crawl(validation.data));
+    const project = await crawl(validation.data);
+    await runStore.saveCrawlProject?.(project);
+    response.status(200).json(project);
   }));
 
   app.get("/api/research-sources", (_request, response) => {
@@ -126,6 +129,7 @@ export function createApp(overrides: Partial<AppDependencies> = {}): Express {
     const run = await runStore.get(id);
     if (!run) throw new ApiError(404, "RUN_NOT_FOUND", "Saved run was not found", { id });
     const result = await interpretEvidence({ evidence: evidenceForRun(run), ...validation.data }, aiProvider ?? undefined, aiConfig);
+    await runStore.saveAiInterpretation?.(run.id, result);
     response.status(200).json(result);
   }));
 
@@ -203,6 +207,13 @@ export function createApp(overrides: Partial<AppDependencies> = {}): Express {
   });
 
   return app;
+}
+
+function createDefaultRunStore(): RunStore {
+  const adapter = process.env.STORAGE_ADAPTER?.trim().toLocaleLowerCase("en-US") || "json";
+  if (adapter === "json") return new JsonRunStore();
+  if (adapter === "sqlite") return new SqliteRunStore(process.env.SQLITE_PATH?.trim() || undefined);
+  throw new Error(`STORAGE_ADAPTER must be json or sqlite; received ${adapter}`);
 }
 
 function asyncHandler(

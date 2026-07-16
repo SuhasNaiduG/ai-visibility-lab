@@ -10,7 +10,7 @@
     "test:watch": "vitest"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22.13"
   },
   "dependencies": {
     "cheerio": "^1.2.0",
