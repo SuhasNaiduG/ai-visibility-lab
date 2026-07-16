@@ -1,6 +1,6 @@
 import type { Evidence } from "../rules/types.js";
 
-export const PROPOSAL_REVIEW_LABEL = "Proposal â€” requires factual and professional review before publication.";
+export const PROPOSAL_REVIEW_LABEL = "Proposal — requires factual and professional review before publication.";
 
 export type ImplementationArtifactType =
   | "title"

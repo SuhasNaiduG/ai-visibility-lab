@@ -5,6 +5,10 @@ import { PROPOSAL_REVIEW_LABEL } from "../../packages/proposals/types.js";
 import { makeAnalysis } from "../helpers/analysis.js";
 
 describe("implementation artifact generator", () => {
+  it("preserves the exact factual and professional review label", () => {
+    expect(PROPOSAL_REVIEW_LABEL).toBe("Proposal — requires factual and professional review before publication.");
+  });
+
   it("generates deterministic evidence-linked proposals without inserting unverified facts", () => {
     const target = makeAnalysis("https://target.example/", { title: null, titleLength: 0, questionCount: 0, detectedQuestions: [] });
     const competitor = makeAnalysis("https://competitor.example/", { title: "Confirmed title", titleLength: 15, questionCount: 1, detectedQuestions: ["What is included?"] });
