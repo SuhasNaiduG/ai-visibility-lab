@@ -148,6 +148,20 @@ describe("demo implementation and verification UI", () => {
     expect(html).toContain('name="competitorUrl5"');
     expect(html).toContain('name="competitorRank5"');
   });
+
+  it("exposes project, crawl, evidence, source, verification, history, and roadmap workspace views", async () => {
+    const source = await readFile(new URL("../../apps/web/public/app.js", import.meta.url), "utf8");
+    const html = await readFile(new URL("../../apps/web/public/index.html", import.meta.url), "utf8");
+
+    for (const panel of ["projects-panel", "analyze-panel", "compare-panel", "history-panel", "sources-panel", "roadmap-panel"]) {
+      expect(html).toContain(`id="${panel}"`);
+    }
+    expect(source).toContain('section("Crawl Explorer"');
+    expect(source).toContain('section("Evidence Explorer"');
+    expect(source).toContain('section("Implementation workspace"');
+    expect(source).toContain('section("Fixture verification"');
+    expect(source).toContain('/api/research-sources');
+  });
 });
 
 function findByClass(node: FakeNode, className: string): FakeNode | undefined {

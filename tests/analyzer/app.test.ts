@@ -229,6 +229,16 @@ describe("analyzer API", () => {
     expect(compareAndSave).toHaveBeenCalledWith(payload);
   });
 
+  it("returns the versioned research source registry", async () => {
+    const response = await request(app()).get("/api/research-sources");
+    expect(response.status).toBe(200);
+    expect(response.body.registryVersion).toBe("1.0.0");
+    expect(response.body.sources).toEqual(expect.arrayContaining([
+      expect.objectContaining({ sourceId: "RFC-9309", sourceType: "internet-standard" }),
+      expect.objectContaining({ sourceType: "internal-heuristic", url: null })
+    ]));
+  });
+
   it("distinguishes a completed comparison save failure from a history loading failure", async () => {
     compareAndSave.mockRejectedValue(new RunStoreError("INVALID_RECORD", "Record validation failed", {
       issues: [{ path: ["history", "contentCountChanges", 0], received: "rejected value" }]

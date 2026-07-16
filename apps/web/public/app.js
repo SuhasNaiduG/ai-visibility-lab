@@ -660,6 +660,103 @@ function renderComparison(run, container) {
   container.append(jsonDetails(run, "Complete saved run JSON"));
 }
 
+function renderCrawlProject(project, container) {
+  clear(container);
+  const aggregate = project.aggregate ?? {};
+  container.append(metricCards([
+    ["Project ID", project.projectId],
+    ["Status", project.status],
+    ["Origin", project.origin],
+    ["Analyzed pages", aggregate.analyzedPages ?? 0],
+    ["Blocked", aggregate.blockedPages ?? 0],
+    ["Skipped", aggregate.skippedPages ?? 0],
+    ["Errors", aggregate.errorPages ?? 0],
+    ["Truncated", project.truncated]
+  ]));
+
+  container.append(section("Crawl Explorer", [
+    table(["Order", "Status", "Depth", "URL", "Discovered from", "Reason"], (project.pages ?? []).map((page) => [
+      page.order + 1,
+      page.status,
+      page.depth,
+      page.url,
+      page.discoveredFrom,
+      [page.reasonCode, page.message].filter(Boolean).join(": ")
+    ])),
+    labelled("Bounded crawl configuration", `${project.config?.maxPages} pages, depth ${project.config?.maxDepth}, minimum delay ${project.config?.minimumDelayMs} ms`)
+  ]));
+
+  const evidenceList = element("div", { className: "crawl-evidence-list" });
+  for (const page of project.pages ?? []) {
+    const summary = `${page.order + 1}. ${page.status.toUpperCase()} â€” ${page.url}`;
+    if (!page.analysis) {
+      evidenceList.append(element("details", { className: `crawl-page crawl-${page.status}` }, [
+        element("summary", { text: summary }),
+        labelled("Observed state", [page.reasonCode, page.message].filter(Boolean).join(": ") || "No page analysis was produced.")
+      ]));
+      continue;
+    }
+    evidenceList.append(element("details", { className: "crawl-page crawl-analyzed" }, [
+      element("summary", { text: summary }),
+      metricCards([
+        ["HTTP", page.analysis.statusCode],
+        ["Words", page.analysis.wordCount],
+        ["Schema types", page.analysis.schemaTypes],
+        ["Questions", page.analysis.questionCount],
+        ["Findings", page.analysis.findings?.length ?? 0]
+      ]),
+      renderFindings(page.analysis.findings ?? []),
+      jsonDetails(page.analysis.analyzerResults ?? {}, "Versioned analyzer observations"),
+      jsonDetails(page.analysis, "Complete page evidence")
+    ]));
+  }
+  container.append(section("Evidence Explorer", evidenceList));
+  container.append(section("Aggregated site evidence", [
+    metricCards([["Total words", aggregate.totalWords], ["Schema types", aggregate.uniqueSchemaTypes], ["Topic terms", aggregate.uniqueTopicTerms]]),
+    table(["Finding rule", "Pages observed"], (aggregate.findingCounts ?? []).map((item) => [item.ruleId, item.pages]))
+  ]));
+  container.append(section("Research boundaries", element("ul", { className: "plain-list" }, (project.limitations ?? []).map((item) => element("li", { text: item })))));
+  container.append(jsonDetails(project, "Complete project JSON"));
+}
+
+async function loadResearchSources() {
+  const results = $("#sources-results");
+  const error = $("#sources-error");
+  hideError(error);
+  clear(results);
+  results.append(element("p", { className: "empty", text: "Loading versioned sourcesâ€¦" }));
+  try {
+    const registry = await api("/api/research-sources");
+    hideError(error);
+    clear(results);
+    results.append(metricCards([
+      ["Registry version", registry.registryVersion],
+      ["Sources", registry.sources?.length ?? 0],
+      ["External references", (registry.sources ?? []).filter((source) => source.url).length],
+      ["Internal heuristics", (registry.sources ?? []).filter((source) => source.sourceType === "internal-heuristic").length]
+    ]));
+    const list = element("div", { className: "source-list" });
+    for (const source of registry.sources ?? []) {
+      const title = source.url
+        ? element("a", { text: source.title, attributes: { href: source.url, target: "_blank", rel: "noreferrer" } })
+        : element("span", { text: source.title });
+      list.append(element("article", { className: "source-card" }, [
+        element("div", { className: "tags" }, [source.sourceId, source.sourceType, `Confidence: ${source.confidence}`].map((tag) => element("span", { className: "tag", text: tag }))),
+        element("h3", {}, title),
+        labelled("Publisher", source.publisher),
+        labelled("Supported claim", source.claimSupported),
+        labelled("Applicable analyzers", source.applicableAnalyzers),
+        labelled("Scope and limitation", source.notes),
+        labelled("Accessed", source.accessedAt)
+      ]));
+    }
+    results.append(section("Documented guidance and explicit heuristics", list));
+  } catch (caught) {
+    clear(results);
+    showError(error, caught);
+  }
+}
+
 let historyRequestSequence = 0;
 
 function beginHistoryRequest(error) {
@@ -724,7 +821,28 @@ $$('.tab').forEach((button) => button.addEventListener("click", () => {
     panel.hidden = !active;
   });
   if (button.dataset.panel === "history-panel") loadRunHistory();
+  if (button.dataset.panel === "sources-panel") loadResearchSources();
 }));
+
+$("#crawl-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const error = $("#crawl-error");
+  hideError(error);
+  setBusy(form, true, "Discovering and analyzing a bounded same-origin page setâ€¦");
+  try {
+    const values = Object.fromEntries(new FormData(form));
+    const payload = {
+      targetUrl: values.targetUrl,
+      maxPages: Number(values.maxPages),
+      maxDepth: Number(values.maxDepth),
+      minimumDelayMs: Number(values.minimumDelayMs)
+    };
+    const project = await api("/api/projects/crawl", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+    renderCrawlProject(project, $("#crawl-results"));
+  } catch (caught) { showError(error, caught); }
+  finally { setBusy(form, false); }
+});
 
 $("#analyze-form").addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -764,6 +882,7 @@ $("#compare-form").addEventListener("submit", async (event) => {
 });
 
 $("#refresh-history").addEventListener("click", loadRunHistory);
+$("#refresh-sources").addEventListener("click", loadResearchSources);
 
 api("/health").then((health) => {
   const status = $("#health-status");

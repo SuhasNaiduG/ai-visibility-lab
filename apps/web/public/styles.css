@@ -43,6 +43,8 @@ h4 { margin: 0 0 8px; }
 .form-grid .wide { min-width: 0; }
 .comparison-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .comparison-form .wide { grid-column: 1 / -1; }
+.crawl-form { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.crawl-form .wide { grid-column: 1 / -1; }
 fieldset { display: grid; grid-template-columns: 2fr 1fr; gap: 12px; min-width: 0; margin: 0; padding: 14px; border: 1px solid var(--line); border-radius: 10px; }
 legend { padding: 0 6px; color: var(--accent); font-weight: 800; }
 label { display: grid; gap: 6px; color: var(--muted); font-size: 0.86rem; font-weight: 700; }
@@ -90,6 +92,14 @@ td { max-width: 340px; overflow-wrap: anywhere; }
 .matrix-site-heading { justify-content: flex-start; margin-bottom: 5px; color: var(--ink); font-size: 0.8rem; letter-spacing: 0; text-transform: none; }
 .matrix-url { display: block; color: var(--muted); font-size: 0.7rem; font-weight: 500; letter-spacing: 0; text-transform: none; overflow-wrap: anywhere; }
 .finding-list, .gap-list, .history-list { display: grid; gap: 10px; }
+.crawl-evidence-list, .source-list { display: grid; gap: 12px; }
+.crawl-page, .source-card { padding: 14px; border: 1px solid var(--line); border-radius: 9px; background: #fbfdfb; }
+.crawl-page > summary { overflow-wrap: anywhere; }
+.crawl-page[open] > summary { margin-bottom: 14px; }
+.crawl-page.crawl-blocked, .crawl-page.crawl-error { border-left: 4px solid var(--danger); background: #fff8f8; }
+.crawl-page.crawl-skipped { border-left: 4px solid var(--warn); background: #fffaf1; }
+.source-card h3 a { color: var(--accent); }
+.source-card p { overflow-wrap: anywhere; }
 .finding, .gap, .history-item { padding: 14px; border: 1px solid var(--line); border-left: 4px solid var(--warn); border-radius: 8px; background: #fffdf8; }
 .finding.high, .gap.high { border-left-color: var(--danger); }
 .finding.low, .gap.low { border-left-color: #5f8274; }
@@ -158,8 +168,8 @@ footer { padding: 0 0 42px; color: var(--muted); font-size: 0.88rem; }
 @media (max-width: 780px) {
   .site-header, .panel-heading { display: block; }
   .status { display: inline-block; margin-top: 8px; }
-  .form-grid, .comparison-form, fieldset { grid-template-columns: 1fr; }
-  .comparison-form .wide { grid-column: auto; }
+  .form-grid, .comparison-form, .crawl-form, fieldset { grid-template-columns: 1fr; }
+  .comparison-form .wide, .crawl-form .wide { grid-column: auto; }
   .history-item { display: block; }
   .history-open { margin-top: 10px; }
   .gap-evidence-grid, .comparison-sites, .evidence-record-grid, .roadmap-grid { grid-template-columns: 1fr; }

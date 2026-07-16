@@ -28,6 +28,7 @@ import {
 } from "./compare.js";
 import { crawlSiteProject } from "./crawl.js";
 import type { CrawlResearchProject } from "../../packages/crawler/site-crawl.js";
+import { researchSources, RESEARCH_SOURCE_REGISTRY_VERSION } from "../../packages/research/sources.js";
 
 export interface AppDependencies {
   analyze: (url: string) => Promise<AnalysisResult>;
@@ -84,6 +85,13 @@ export function createApp(overrides: Partial<AppDependencies> = {}): Express {
     if (!validation.success) throw validationError(validation.error.flatten());
     response.status(200).json(await crawl(validation.data));
   }));
+
+  app.get("/api/research-sources", (_request, response) => {
+    response.status(200).json({
+      registryVersion: RESEARCH_SOURCE_REGISTRY_VERSION,
+      sources: researchSources
+    });
+  });
 
   app.get("/api/runs", asyncHandler(async (_request, response) => {
     response.status(200).json(await runStore.list());

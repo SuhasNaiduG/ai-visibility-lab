@@ -19,12 +19,43 @@
 
     <main>
       <nav class="tabs" aria-label="Workflows">
-        <button class="tab active" type="button" data-panel="analyze-panel">Single-site analysis</button>
+        <button class="tab active" type="button" data-panel="projects-panel">Projects</button>
+        <button class="tab" type="button" data-panel="analyze-panel">Single-site analysis</button>
         <button class="tab" type="button" data-panel="compare-panel">Competitor comparison</button>
         <button class="tab" type="button" data-panel="history-panel">Run history</button>
+        <button class="tab" type="button" data-panel="sources-panel">Research sources</button>
+        <button class="tab" type="button" data-panel="roadmap-panel">Roadmap</button>
       </nav>
 
-      <section id="analyze-panel" class="panel active" aria-labelledby="analyze-heading">
+      <section id="projects-panel" class="panel active" aria-labelledby="projects-heading">
+        <div class="panel-heading">
+          <div>
+            <p class="step">Project â†’ Crawl â†’ Evidence</p>
+            <h2 id="projects-heading">Create a bounded research project</h2>
+          </div>
+          <p>Discovers and inspects a deterministic, same-origin page set. Partial, blocked, skipped, and failed pages remain visible.</p>
+        </div>
+        <form id="crawl-form" class="form-grid crawl-form">
+          <label class="wide">Target site URL
+            <input name="targetUrl" type="url" value="https://425clearaligners.com" maxlength="2048" required />
+          </label>
+          <label>Maximum pages
+            <input name="maxPages" type="number" min="1" max="50" value="10" required />
+          </label>
+          <label>Maximum depth
+            <input name="maxDepth" type="number" min="0" max="5" value="2" required />
+          </label>
+          <label>Minimum request delay (ms)
+            <input name="minimumDelayMs" type="number" min="0" max="60000" value="250" required />
+          </label>
+          <button type="submit">Create project and crawl</button>
+          <span class="progress" role="status" aria-live="polite"></span>
+        </form>
+        <div id="crawl-error" class="error" role="alert" hidden></div>
+        <div id="crawl-results" class="results" aria-live="polite"></div>
+      </section>
+
+      <section id="analyze-panel" class="panel" aria-labelledby="analyze-heading" hidden>
         <div class="panel-heading">
           <div>
             <p class="step">Observe → Measure → Analyze</p>
@@ -128,7 +159,19 @@
         <div id="history-results" class="results" aria-live="polite"></div>
       </section>
 
-      <section class="roadmap" aria-labelledby="roadmap-heading">
+      <section id="sources-panel" class="panel" aria-labelledby="sources-heading" hidden>
+        <div class="panel-heading">
+          <div>
+            <p class="step">Guidance â†’ Heuristic â†’ Limitation</p>
+            <h2 id="sources-heading">Research source registry</h2>
+          </div>
+          <button id="refresh-sources" class="secondary" type="button">Refresh sources</button>
+        </div>
+        <div id="sources-error" class="error" role="alert" hidden></div>
+        <div id="sources-results" class="results" aria-live="polite"></div>
+      </section>
+
+      <section id="roadmap-panel" class="panel roadmap" aria-labelledby="roadmap-heading" hidden>
         <h2 id="roadmap-heading">Prototype roadmap</h2>
         <div class="roadmap-grid">
           <article><h3>Working now</h3><ul><li>Single-page analysis</li><li>Competitor comparison</li><li>Evidence-backed findings</li><li>Implementation proposal</li><li>Before/after fixture verification</li><li>Run history</li></ul></article>
