@@ -2,7 +2,7 @@
 
 ## Boundary and invariants
 
-The system observes public HTTP/HTTPS responses and user-entered visibility observations. It does not have access to private analytics, an external index, proprietary ranking/retrieval logic, or an AI provider by default.
+The system observes public HTTP/HTTPS responses, user-entered visibility observations, and aggregate analytics values explicitly imported from CSV. It does not have live provider access, an external index, proprietary ranking/retrieval logic, or an AI provider by default.
 
 The architectural invariants are:
 
@@ -12,6 +12,8 @@ The architectural invariants are:
 4. Comparison conclusions exclude ineligible pages but retain their retrieval evidence.
 5. Persistence parses, aligns, recomputes, and semantically validates records before accepting them.
 6. AI output cannot overwrite deterministic evidence.
+7. Imported analytics stay project-scoped, source-attributed, and traceable to a normalized-record fingerprint.
+8. Opportunities expose thresholds and arithmetic and never become a composite score or causal claim.
 
 ## Component flow
 
@@ -55,6 +57,21 @@ packages/crawler ----------> packages/parser/entities ---> rules/analyzers
 
 ## Runtime flows
 
+### Release 1 analytics import and opportunity flow
+
+```text
+existing research_projects.id
+  -> CSV preview + canonical field mapping
+    -> strict row validation + redacted rejections
+      -> normalized metric + lineage + duplicate fingerprint
+        -> JSON analytics state or SQLite migration-002 tables
+          -> Data Explorer / Search Performance filters
+            -> latest saved public-page + competitor evidence link
+              -> deterministic opportunity + review workflow + exports
+```
+
+The original file is not passed to storage. `AnalyticsStore` receives only normalized metrics, source/import metadata, mapping, counts, redacted rejection reasons, deterministic opportunities/evidence links, and redacted audit events.
+
 ### Single analysis
 
 `POST /api/analyze` validates one URL. `analyzeUrl` normalizes it, applies the crawler request policy, records redirect/network evidence, parses the final HTML response, checks root resources, runs deterministic rules, and runs analyzer library version `1.0.0`. No persistence occurs.
@@ -83,6 +100,7 @@ Exports build a complete report from a validated saved run plus matching manual 
 - Fetches use time, byte, redirect, and content-type bounds.
 - Crawl requests are same-origin, at most 50 pages and depth 5, with an explicit per-host delay.
 - Express limits JSON bodies to 100 KB and never returns a stack trace.
+- CSV import routes use a separate 3 MB transport limit and a stricter 2 MB UTF-8 file limit, with row/column/cell bounds and formula/sensitive-column rejection.
 - Structured startup/shutdown logs omit paths, payloads, evidence, and secrets.
 - JSON writes are serialized and atomically renamed; SQLite writes are transactional with foreign keys and WAL.
 
@@ -90,7 +108,9 @@ Native fetch retains a narrow DNS-rebinding time-of-check/time-of-use window. Pr
 
 ## Persistence model
 
-`RunStore` is the port. `JsonRunStore` is local/test storage. `SqliteRunStore` is the single-instance durable adapter. Migration 001 creates projects, runs, ordered sites/pages, evidence, findings, comparisons, proposals, verifications, research sources, AI interpretations, and a reserved visibility table. The complete validated run remains stored as JSON alongside normalized relational records, allowing strict round-trip validation while keeping queryable extension points.
+`RunStore` remains the research-run port. `AnalyticsStore` is a separate normalized-analytics port with strict JSON and SQLite implementations. Migration 001 creates the canonical `research_projects` table and research-run records. Additive migration 002 references that table directly and adds connector sources, import jobs/rejections, metric records, opportunities, opportunity-evidence links, and retained redacted audit events. It does not create a parallel project identity.
+
+Migration 002 has been exercised only on temporary fresh/existing-schema test databases. No persistent local or deployed database was migrated during Release 1 implementation.
 
 Manual visibility observations currently use a separate atomic JSON store. That boundary is intentional and documented as a future consolidation task.
 
@@ -103,7 +123,10 @@ Manual visibility observations currently use a separate atomic JSON store. That 
 - Implement an AI provider against `packages/ai/types.ts`; do not modify deterministic records.
 - Implement approved visibility providers against `packages/visibility/types.ts`.
 - Add durable background work before increasing crawl bounds.
+- Add offline connector definitions in `packages/analytics/connectors.ts`; add normalization in `import-service.ts` and preserve the shared lineage schemas.
+- Add opportunity rules only in `packages/analytics/opportunities.ts`, with stable IDs/versions, explicit thresholds, calculations, success metrics, and limitations.
+- Any live connector/OAuth work requires a separately approved provider/security/migration plan and must emit the same normalized contracts.
 
 ## Deliberate non-features
 
-There is no aggregate score, browser rendering, automatic SERP scraping, ranking guarantee, causal attribution, authentication system, multi-tenant database, distributed job queue, bundled AI adapter, or PDF generator.
+There is no aggregate score, browser rendering, automatic SERP scraping, live analytics/OAuth provider, ranking guarantee, causal attribution, authentication system, multi-tenant database, distributed job queue, bundled AI adapter, or PDF generator.

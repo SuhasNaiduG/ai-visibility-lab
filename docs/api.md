@@ -172,3 +172,60 @@ Every saved/reopened run must satisfy:
 - verification equality against recomputation when a baseline exists.
 
 Object equality is recursive and key-order independent; arrays remain order-sensitive. Validation is not weakened to accept malformed records.
+
+## Release 1 analytics connectors and imports
+
+### `GET /api/connectors`
+
+Returns the four offline definitions, their canonical fields/limitations, `release: 1`, and `liveProviderAccess: false`.
+
+### `GET /api/growth/projects`
+
+Returns existing crawl/comparison research project references available to analytics. No analytics-specific project-creation endpoint exists.
+
+### `POST /api/imports/preview`
+
+```json
+{
+  "connectorId": "search-console-csv",
+  "file": { "fileName": "search.csv", "mimeType": "text/csv", "content": "Query,Page,..." }
+}
+```
+
+Returns headers, up to five safe sample rows, total rows, SHA-256 fingerprint, mapping suggestions, and warnings. It rejects malformed/bounded/prohibited-sensitive files before storage.
+
+### `POST /api/imports`
+
+Accepts `projectId`, `connectorId`, `sourceLabel`, optional account/property labels, the transient file object, and a canonical-to-header `mapping`. Returns 201 with the stored job summary, redacted rejections, and generated-opportunity count. It never returns or stores a copy of the original CSV.
+
+### Import/source reads and deletion
+
+```http
+GET    /api/data-sources?projectId=...
+GET    /api/imports?projectId=...
+GET    /api/imports/:id?projectId=...
+DELETE /api/imports/:id?projectId=...
+```
+
+Delete removes only import-owned metrics/rejections and metric evidence links. Opportunities, project, unrelated records, and redacted audit history remain.
+
+## Analytics records and Search Performance
+
+`GET /api/metrics?projectId=...` accepts optional `metricType`, `page`, `query`, `dateFrom`, `dateTo`, `device`, and `country` filters.
+
+`GET /api/search-performance?projectId=...` applies the same filters and forces `search-performance` metrics. Rows include query, page, date/range, clicks, impressions, decimal CTR, average position, device, country, source/import IDs, and full lineage.
+
+`GET /api/search-performance/:id?projectId=...` returns imported metrics, matching saved public-page evidence, related public competitor evidence, the deterministic opportunity, exact calculation, action, success metric, and limitations. Missing evidence stays null/empty.
+
+## Opportunity workflow and growth exports
+
+```http
+GET   /api/opportunities?projectId=...
+GET   /api/opportunities/:id?projectId=...
+PATCH /api/opportunities/:id/status?projectId=...
+GET   /api/growth/export?projectId=...&format=json|markdown|csv
+```
+
+The PATCH body is `{ "status": "reviewed" }`, where status is one of `new`, `reviewed`, `approved`, `rejected`, `implemented`, `monitoring`, or `verified`. Exports contain normalized records, lineage, opportunities, audit summaries, and limitations; CSV output is spreadsheet-formula safe.
+
+Analytics errors use the standard envelope. Expected codes include `INVALID_CSV_FILE`, `CSV_TOO_LARGE`, `CSV_PARSE_ERROR`, `SENSITIVE_DATA_PROHIBITED`, `UNSUPPORTED_CONNECTOR`, `INVALID_ANALYTICS_RECORD`, `DUPLICATE_RECORD`, `PROJECT_NOT_FOUND`, `IMPORT_NOT_FOUND`, `SEARCH_RECORD_NOT_FOUND`, and `OPPORTUNITY_NOT_FOUND`.

@@ -93,3 +93,33 @@
 **Decision:** Pin Node 24 LTS, mount `/var/data`, use SQLite, validate all operational inputs before listening, log only safe metadata, and drain on termination.
 
 **Reason:** This is deployable without claiming multi-instance scale. Fixture fallback stays explicit/test-only so failed live requests never silently generate demo records.
+
+## 2026-07-17 — Reuse canonical research project identity
+
+**Decision:** Migration 002 references `research_projects.id` directly and does not add `growth_projects`. The JSON adapter records validated references to crawl/comparison project IDs and never generates analytics project identities.
+
+**Reason:** Parallel identity would make evidence, analytics, deletion, and future authorization ambiguous. Analytics is an extension of existing research work.
+
+## 2026-07-17 — Offline aggregate CSV before live OAuth
+
+**Decision:** Release 1 supports Search Console, web analytics, campaign, and aggregate lead-summary CSV contracts only. Every connector declares `liveAccess: false`.
+
+**Reason:** CSV proves normalization, lineage, privacy, deterministic logic, UX, and storage behavior before provider-specific secrets, scopes, refresh, rate-limit, and deletion concerns are introduced.
+
+## 2026-07-17 — Normalize and discard original files
+
+**Decision:** Persist file metadata/fingerprint, mapping, counts, normalized records, lineage, redacted rejections, and audit summaries; never persist original CSV content or rejected cell values.
+
+**Reason:** The MVP needs reproducible record provenance without expanding retention of direct identifiers or other unnecessary source content.
+
+## 2026-07-17 — Narrow import cascades with retained opportunities and audit
+
+**Decision:** Import deletion cascades only to its rejections and owned metrics; metric removal deletes only matching opportunity-evidence links. Projects, opportunities, unrelated data, sources, and audit events remain.
+
+**Reason:** A deletion control should honor ownership without erasing review history or making unrelated conclusions disappear.
+
+## 2026-07-17 — Transparent opportunity rules, no composite score
+
+**Decision:** Version every opportunity rule and store the observation, threshold arithmetic, action, success metric, limitation, evidence IDs, and review status.
+
+**Reason:** Reviewers can reproduce and reject a threshold-based flag. A hidden weighted score would imply unsupported prediction and make imported values harder to audit.

@@ -69,12 +69,19 @@ npm start
 
 Confirm `GET /health` returns `{"status":"ok"}` and perform the demo workflow in `docs/demo-guide.md` before promoting a deployment.
 
+### Migration 002 hold point
+
+Release 1 analytics migration 002 has passed only fresh/existing temporary-database tests. Do not start this revision with `STORAGE_ADAPTER=sqlite` against an important existing local or deployed database until separate migration approval is granted. At that point, stop the writer, take and verify a backup, inspect schema version/table counts, run migration once, confirm `PRAGMA foreign_keys = 1`, exercise project/import/search/opportunity reads, and retain rollback/restore instructions.
+
+JSON analytics uses `DATA_DIR/analytics.json`; it stores normalized records and lineage only. Original CSV files are never written to disk by the application.
+
 ## Deferred production scale work
 
 - Managed PostgreSQL and object storage for multiple instances.
 - Durable background workers for crawls beyond the current bound.
 - Authentication, authorization, tenant isolation, quotas, and audit-log retention.
 - A reviewed AI provider adapter and secret-manager integration.
+- Reviewed OAuth/provider adapters for Search Console, analytics, campaigns, or CRM; Release 1 is CSV-only.
 - PDF generation; JSON, Markdown, and CSV exports are available now.
 
 Deployment configuration references the official [Node.js release schedule](https://nodejs.org/en/about/previous-releases), [Render Blueprint specification](https://render.com/docs/blueprint-spec), and [Render persistent-disk guidance](https://render.com/docs/disks).

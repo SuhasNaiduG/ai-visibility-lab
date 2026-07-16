@@ -9,7 +9,7 @@ npm run build
 npm start
 ```
 
-Durable local mode:
+Durable local mode (new/temporary database only until migration 002 receives separate persistent-database approval):
 
 ```powershell
 $env:STORAGE_ADAPTER='sqlite'
@@ -34,6 +34,19 @@ Open `http://localhost:3000`. Confirm the header reports the service ready.
 10. **Optional AI** — show status/button. In the shipped application it remains unavailable because no provider adapter is bundled; deterministic analysis continues normally.
 11. **Roadmap** — distinguish delivered SQLite durable storage from deferred multi-instance database, background jobs, approved visibility providers, and PDF.
 
+## Release 1 growth-intelligence workflow
+
+1. Complete **Projects** or **Competitor comparison** so the existing research project appears in analytics project selectors.
+2. Open **CSV Imports**. Select Search Console CSV and a small aggregate export. Preview the file, show its fingerprint/header mapping, then import.
+3. Review accepted/rejected/duplicate counts. Explain that rejected values and the original CSV are not retained.
+4. Open **Data Sources** to show connector/source/import attribution and the truthful CSV-only boundary.
+5. Open **Data Explorer**, filter records, and inspect the displayed lineage hashes/transformation/limitations.
+6. Open **Search Performance**. Filter by page, query, date, device, and country. Confirm the visible columns are Query, Page, Date/range, Clicks, Impressions, CTR, Average position, Device, Country, and Import source.
+7. Open a row. Walk through imported metrics, matching public evidence, related public competitor evidence, deterministic opportunity, exact calculation, proposed action, success metric, and limitation. Empty evidence must remain explicit.
+8. Open **Opportunity Backlog**, review exact rules/calculations, change one workflow status, and export JSON/Markdown/CSV.
+9. Return to **CSV Imports** and demonstrate controlled deletion only with disposable test data. State that metric/evidence links are removed while project, opportunities, unrelated data, and redacted audit history remain.
+10. State clearly that Release 1 has no OAuth, credentials, live provider access, automated refresh, or fabricated analytics.
+
 ## Deterministic no-network fallback
 
 If external access is unavailable, do not pretend a fixture is a live crawl. Demonstrate the bundled before/after path with:
@@ -54,7 +67,7 @@ The original/corrected fixtures exercise extraction, comparison, save/reopen/lat
 
 ## Boundaries to state aloud
 
-- Public static evidence only; no private analytics, actual index state, backlink data, or JavaScript rendering.
+- Public static evidence plus explicitly imported aggregate CSV values only; no live private-provider access, actual index state, backlink data, or JavaScript rendering.
 - No ranking/citation guarantee, proprietary-system simulation, automated SERP scraping, or synthetic visibility score.
 - Missing evidence is page-scoped, not proof about the organization.
 - Proposals are not published changes and require review, especially for YMYL/professional claims.

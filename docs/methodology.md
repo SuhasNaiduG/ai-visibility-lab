@@ -82,6 +82,14 @@ Manual observations record query, engine, location, device, date, rank and/or ci
 
 Registry version `1.0.0` separates standards/official guidance/schema/accessibility sources from bounded internal heuristics. Source support applies only to the stated claim; it never converts an observable page signal into a guaranteed visibility outcome. See `docs/research-sources.md`.
 
+## Imported analytics and opportunities
+
+Release 1 treats CSV metrics as user-supplied aggregate observations. Values are normalized but never generated, imputed, extrapolated, refreshed, or verified against a live provider. Source date/range, project, connector/source/import identity, stable record hashes, transformation version, confidence, and limitations remain attached.
+
+Opportunity rules apply published thresholds to those imported values. Exact arithmetic and the threshold test are stored alongside every flag. Priorities order review; they do not estimate lift. Later “success” means a comparable imported segment crosses the declared review threshold—not that a website change caused the movement.
+
+Search detail links an imported page to an exact normalized URL in the latest saved run. Query-term overlap may select related public competitor topics/questions or gap IDs, but absent overlap remains empty and no semantic relationship is invented.
+
 ## Known blind spots
 
-The system cannot observe private analytics, conversions, revenue, backlinks, Search Console data, actual index state, personalization, proprietary retrieval factors, dynamic-only DOM, authenticated pages, or historical rankings not supplied by a user/provider. Native fetch has a residual DNS-rebinding window. Resource discovery and robots behavior are practical subsets. Multi-page crawl remains bounded and synchronous.
+The system cannot independently observe live/private analytics, revenue, backlinks, actual index state, personalization, proprietary retrieval factors, dynamic-only DOM, authenticated pages, or historical rankings not supplied by a user/provider. It can display only the aggregate Search Console/analytics/campaign/lead values explicitly imported by a user and cannot verify provider sampling, attribution, consent, instrumentation, privacy thresholds, or currency. Native fetch has a residual DNS-rebinding window. Resource discovery and robots behavior are practical subsets. Multi-page crawl remains bounded and synchronous.

@@ -27,10 +27,14 @@ The lab does not generate a synthetic visibility score, predict rankings, scrape
 - Evidence-linked implementation proposals for metadata, canonicals, headings, FAQ/schema, provider/reviewer/reference/risk/contact blocks, links, page briefs, tables, and image-alt guidance.
 - Strict comparison persistence, reopen/latest/list APIs, semantic history, analyzer-aware verification, evidence diffs, and proposal-resolution links.
 - Manual rank/citation observations with query, engine, location, device, date, reference, and notes. No automated provider is presented as active.
+- Release 1 growth-intelligence connectors for validated Search Console, web analytics, campaign, and aggregate lead-summary CSV exports; no live provider access.
+- Strict normalized analytics records with project isolation, source/import lineage, deterministic duplicate protection, redacted row rejections, JSON/SQLite parity, and controlled import deletion.
+- Search Performance table with page/query/date/device/country filters and row detail linking imported values to matching saved public-page and competitor evidence.
+- Deterministic opportunity backlog with exact calculations, limitations, actions, success metrics, persisted review statuses, and JSON/Markdown/CSV exports.
 - Complete JSON, Markdown, and CSV reports.
 - JSON local storage and transactional SQLite durable storage with migrations.
 - Optional, schema-validated AI interpretation interfaces with evidence citations, prompt versioning, bounded input/output, timeout handling, and no bundled live provider.
-- Accessible responsive research workspace: Projects, Single Analysis, Comparison, History, Visibility Observations, Research Sources, and Roadmap.
+- Accessible responsive research workspace: Projects, Single Analysis, Comparison, History, Visibility Observations, Data Sources, CSV Imports, Data Explorer, Search Performance, Opportunity Backlog, Research Sources, and Roadmap.
 - Render deployment blueprint, health check, fail-fast environment validation, structured safe logs, and graceful shutdown.
 
 ## Quick start
@@ -67,6 +71,7 @@ The service writes generated data under `data/`, which is ignored by Git. Copy `
 6. After publishing reviewed changes, run the same normalized target again to generate history and verification.
 7. Record manual visibility observations separately. Treat concurrent movement as non-causal.
 8. Optionally request AI interpretation only after configuring a reviewed adapter; deterministic findings remain authoritative.
+9. For Release 1 analytics, select the crawl/comparison project, preview and map a CSV, review accepted/rejected counts, inspect normalized lineage, then review Search Performance and the opportunity backlog.
 
 See [the demo guide](docs/demo-guide.md) for an exact walkthrough.
 
@@ -82,6 +87,9 @@ Browser workspace
             -> JSON or SQLite run store
               -> history + verification + reports
                 -> optional evidence-grounded interpretation
+
+CSV export -> preview/mapping -> strict row normalization -> project-scoped JSON/SQLite analytics store
+  -> Search Performance + evidence linkage -> deterministic opportunity backlog -> workflow + exports
 ```
 
 The browser contains presentation logic only. Fetch policy, parsing, rules, analyzers, comparison, proposals, verification, reports, and persistence are separate typed modules. See [architecture](docs/architecture.md) and the [file map](docs/file-map.md).
@@ -114,6 +122,21 @@ POST /api/runs/:id/interpretations
 GET  /api/visibility-providers
 POST /api/visibility-observations
 GET  /api/visibility-observations?targetUrl=...
+GET  /api/connectors
+GET  /api/growth/projects
+POST /api/imports/preview
+POST /api/imports
+GET  /api/imports?projectId=...
+GET  /api/imports/:id?projectId=...
+DELETE /api/imports/:id?projectId=...
+GET  /api/data-sources?projectId=...
+GET  /api/metrics?projectId=...
+GET  /api/search-performance?projectId=...
+GET  /api/search-performance/:id?projectId=...
+GET  /api/opportunities?projectId=...
+GET  /api/opportunities/:id?projectId=...
+PATCH /api/opportunities/:id/status?projectId=...
+GET  /api/growth/export?projectId=...&format=json|markdown|csv
 ```
 
 All API failures use `{ "error": { "code", "message", "details" } }`. Full contracts are in [API documentation](docs/api.md).
@@ -124,8 +147,8 @@ Direct observations are kept separate from internal heuristics, deterministic in
 
 ## Storage and deployment
 
-- `STORAGE_ADAPTER=json` is the local/test default. The JSON adapter validates records and atomically replaces its file.
-- `STORAGE_ADAPTER=sqlite` uses the built-in `node:sqlite` API, strict tables, migrations, WAL, foreign keys, and transactions. It is the supplied single-instance production option.
+- `STORAGE_ADAPTER=json` is the local/test default. Run data and analytics data use separate strictly validated, atomically replaced files.
+- `STORAGE_ADAPTER=sqlite` uses the built-in `node:sqlite` API, strict tables, migrations, WAL, foreign keys, and transactions. Analytics migration 002 references the existing `research_projects` table directly and has been applied only to temporary test databases in Release 1 verification.
 - The Render blueprint mounts `/var/data`; only one web instance should use the SQLite database.
 - Manual visibility observations currently use their own atomic JSON store even when comparison runs use SQLite.
 
@@ -136,7 +159,8 @@ See [storage](docs/storage.md) and [deployment](docs/deployment.md).
 - Static HTML only: no browser rendering, JavaScript execution, authenticated crawl, or CSS visibility model.
 - Bounded synchronous crawls only; long-running/background jobs are planned before any higher page limit.
 - No authentication, tenant isolation, quotas, audit retention, or multi-instance database.
-- No Search Console, analytics, backlink, automated rank, or citation provider integrations.
+- No live Search Console, analytics, campaign, CRM, backlink, automated rank, or citation provider integrations. Release 1 uses user-supplied aggregate CSV values only.
+- No original CSV retention, direct personal identifiers, patient data, form contents, call recordings, credentials, or OAuth tokens.
 - No bundled AI adapter. Enabling environment variables alone does not activate AI.
 - No PDF export; JSON, Markdown, and CSV are verified.
 - No causal or ranking guarantee and no proprietary-system measurement.

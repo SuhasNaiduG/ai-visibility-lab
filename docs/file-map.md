@@ -77,6 +77,24 @@
 | `packages/ai/interpret.ts` | Prompt, timeout, schema/citation guardrails | Prompt/provider validation |
 | `packages/reports/report.ts` | Complete report model and JSON/Markdown/CSV renderers | PDF/new formats |
 
+## Release 1 analytics connectors
+
+| Location | Responsibility | Future edits |
+| --- | --- | --- |
+| `packages/analytics/types.ts` | Analytics store, metric, lineage, import, opportunity, audit contracts | Contract/version changes |
+| `packages/analytics/schemas.ts` | Strict persisted analytics schemas and cross-field alignment | Validation bounds |
+| `packages/analytics/connectors.ts` | Offline connector registry and canonical fields | Add reviewed CSV connector definitions |
+| `packages/analytics/csv.ts` | Bounded parser, preview, mapping suggestions, sensitive/formula controls, CSV escaping | Parser/security limits |
+| `packages/analytics/import-service.ts` | Row normalization, hashes, redacted rejections, import bundle | Canonical transformations |
+| `packages/analytics/opportunities.ts` | Deterministic rule thresholds/calculations/actions/limitations | Opportunity model versions |
+| `packages/analytics/detail.ts` | Search row linkage to latest saved public/competitor evidence | Evidence matching policy |
+| `packages/analytics/json-analytics-store.ts` | Strict atomic analytics JSON adapter | Local/test persistence |
+| `packages/analytics/sqlite-analytics-store.ts` | Transactional project-scoped SQLite adapter | Durable queries/backup behavior |
+| `packages/analytics/sqlite-migration.ts` | Executable migration 002 | Migration execution |
+| `packages/analytics/migrations/002_analytics_connectors.sql` | Reviewable migration 002 SQL | Schema review only |
+| `packages/analytics/api-schemas.ts` | Strict analytics HTTP schemas | Public analytics inputs |
+| `packages/analytics/report.ts` | Growth JSON/Markdown/CSV exports | Growth report formats |
+
 ## Browser workspace
 
 | Location | Responsibility | Future edits |
@@ -94,6 +112,7 @@
 - `tests/proposals/`, `tests/verification/`, `tests/reports/`: artifact, recrawl, and export contracts.
 - `tests/ai/`, `tests/visibility/`: mock-only AI validation and isolated manual observation persistence.
 - `tests/analyzer/`: API integration, comparison persistence/reopen/history, frontend source regression, environment validation.
+- `tests/analytics/`: CSV/import/opportunity, HTTP/evidence/export, migration/FK/isolation/cascade/duplicate/parity/privacy regressions.
 - `fixtures/verification/original.html` and `corrected.html`: deterministic no-network before/after pages.
 
 ## Documentation
@@ -108,5 +127,9 @@
 - `docs/decision-log.md`: consequential choices.
 - `docs/build-journal.md`: verified execution record.
 - `docs/change-report.md`: final acceptance handoff.
+- `docs/data-connectors.md`: connector registry, project identity, lineage, future-live boundary.
+- `docs/csv-imports.md`: preview/mapping/normalization/duplicate/deletion behavior.
+- `docs/privacy-and-security.md`: prohibited data, isolation, retention, logging, deployment boundaries.
+- `docs/opportunity-model.md`: Release 1 deterministic rules, calculations, workflow, limitations.
 
 Generated locations: `dist/` contains TypeScript output; `data/` contains ignored runtime data. Neither should be hand-edited.

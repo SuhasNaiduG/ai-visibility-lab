@@ -1,6 +1,6 @@
 # Change Report
 
-Date: 2026-07-16
+Date: 2026-07-17
 
 Repository: `C:\Users\User_2\Documents\Projects\ai-visibility-lab`
 
@@ -17,6 +17,182 @@ Observe -> Measure -> Analyze -> Compare -> Propose -> Verify -> Monitor
 ```
 
 Users can run bounded site projects, inspect page/site evidence, compare a target with up to five competitors, review exact differences and implementation artifacts, reopen/export saved work, verify a later run, record manual visibility observations, inspect a versioned research registry, and deploy one durable SQLite-backed instance. No AI API, rank provider, synthetic visibility score, ranking guarantee, fabricated production record, or weakened validation was introduced.
+
+## Release 1 growth intelligence completion
+
+Release 1 adds offline aggregate analytics connectors while preserving every existing research feature. It implements CSV preview/mapping, normalized metrics, end-to-end lineage, Search Performance, public/competitor evidence linkage, deterministic opportunities, review workflow, controlled deletion, and growth exports. No dependency, live network connector, OAuth flow, credential/token store, original-file retention, generated analytics value, or persistent database migration was introduced.
+
+### Architecture flow
+
+```text
+existing crawl/comparison -> research_projects.id
+  -> offline connector definition (`liveAccess: false`)
+    -> bounded CSV preview + canonical mapping
+      -> row validation + redacted rejection
+        -> normalized metric + lineage + stable duplicate hashes
+          -> strict atomic JSON OR migration-002 SQLite transaction
+            -> Data Explorer / Search Performance filters
+              -> latest saved public-page + public competitor evidence
+                -> versioned deterministic opportunity
+                  -> persisted workflow status + JSON/Markdown/CSV export
+```
+
+`research_projects` remains canonical. Migration 002 does not add `growth_projects` or any parallel identity. SQLite references the existing project foreign key directly. JSON stores validated references to IDs created by the existing crawl/comparison flow and generates no analytics project ID.
+
+### Connector and lineage contracts
+
+| Connector | Normalized record | Required fields |
+| --- | --- | --- |
+| Search Console CSV | `search-performance` | query, page, date, clicks, impressions, ctr, averagePosition |
+| Web Analytics CSV | `web-analytics` | page, date, sessions |
+| Campaign CSV | `campaign-performance` | campaign, date, spend, clicks, conversions |
+| Lead Summary CSV | `lead-summary` | source, date, leads, qualifiedLeads |
+
+Each accepted record keeps project/source/import IDs, connector/version, `csv` method, source-record and normalized SHA-256 hashes, imported/source dates, transformation version, validation status, confidence, and limitations. Original CSV content and rejected values never reach either store.
+
+### Schema and deletion behavior
+
+Migration 002 adds `connector_sources`, `import_jobs`, `import_rejections`, `metric_records`, `opportunities`, `opportunity_evidence`, and `analytics_audit_events`. Tables and indexes are project-scoped. SQLite foreign-key enforcement is enabled and asserted.
+
+Deleting an import removes its rejections, exclusively owned metrics, and metric-backed opportunity link rows. It does not delete the project, source, opportunity, unrelated metric, or audit event. The retained deletion audit contains only safe IDs/counts. JSON performs the same relationship checks and deletion algorithm.
+
+### CSV and privacy controls
+
+- `.csv` plus allowlisted MIME type; 2 MB, 10,000-row, 100-column, and 10,000-character cell limits;
+- quoted fields/commas/CRLF/BOM support and strict header/column validation;
+- manual mapping with connector-specific required/optional canonical fields;
+- strict ISO dates, HTTP(S) pages, finite non-negative values, whole counts, and rate/cross-field checks;
+- formula-like cell rejection and spreadsheet-safe CSV export escaping;
+- whole-file rejection for credential/token, direct-identifier, patient/health, form/free-text, or call-data columns;
+- row rejections retain only row number, code, canonical field, and generic reason;
+- deterministic within-file/across-import duplicate protection plus database uniqueness race protection.
+
+### Search Performance and evidence detail
+
+The table visibly includes Query, Page, Date/range, Clicks, Impressions, CTR, Average position, Device, Country, and Import source. Filters cover page, query, date-from/date-to, device, and country.
+
+Opening a row shows, in order: imported Search Console metrics; matching public website evidence; related public competitor evidence; deterministic opportunity; exact calculation; proposed action; success metric; and limitation. Exact normalized URL is used for page matching against the latest saved target run. Query-term overlap selects only actually observed competitor topics/questions/gap IDs. Missing evidence remains null/empty and explicit.
+
+### Opportunity rules and comparison metrics
+
+Release 1 adds nine transparent rules:
+
+- `SEARCH_HIGH_IMPRESSIONS_LOW_CTR`: impressions >= 100 and CTR < 3%;
+- `SEARCH_STRONG_POSITION_LOW_CTR`: impressions >= 50, position <= 5, CTR < 3%;
+- `SEARCH_PAGE_TWO_DEMAND`: impressions >= 50 and 10 < position <= 20;
+- `SEARCH_QUERY_MULTIPLE_PAGES`: same query/date/device/country on >1 page and total impressions >= 100;
+- `ENGAGEMENT_HIGH_TRAFFIC_WEAK_ENGAGEMENT`: sessions >= 100 and engagement < 40%;
+- `ENGAGEMENT_HIGH_TRAFFIC_LOW_CONVERSION`: sessions >= 100 and conversions/sessions < 1%;
+- `ENGAGEMENT_LOW_TRAFFIC_STRONG_CONVERSION`: 0 < sessions < 50 and conversions/sessions >= 5%;
+- `CAMPAIGN_SPEND_WITHOUT_CONVERSION`: spend >= 100 source-currency units and zero conversions;
+- `LEAD_VOLUME_LOW_QUALIFICATION`: leads >= 20 and qualified/leads < 25%.
+
+Every opportunity stores observation, exact calculation/threshold, action, later comparable-import success metric, limitation, source metric IDs, priority/category, stable group key, rule version `1.0.0`, and workflow status. These are review flags—not a composite score, forecast, attribution, or causal claim. The existing 43 public-page comparison metrics and history/verification logic are unchanged.
+
+### New endpoints
+
+```text
+GET    /api/connectors
+GET    /api/growth/projects
+POST   /api/imports/preview
+POST   /api/imports
+GET    /api/imports?projectId=...
+GET    /api/imports/:id?projectId=...
+DELETE /api/imports/:id?projectId=...
+GET    /api/data-sources?projectId=...
+GET    /api/metrics?projectId=...&metricType=...&page=...&query=...&dateFrom=...&dateTo=...&device=...&country=...
+GET    /api/search-performance?projectId=...&page=...&query=...&dateFrom=...&dateTo=...&device=...&country=...
+GET    /api/search-performance/:id?projectId=...
+GET    /api/opportunities?projectId=...
+GET    /api/opportunities/:id?projectId=...
+PATCH  /api/opportunities/:id/status?projectId=...
+GET    /api/growth/export?projectId=...&format=json|markdown|csv
+```
+
+### Release 1 files created
+
+```text
+docs/csv-imports.md
+docs/data-connectors.md
+docs/opportunity-model.md
+docs/privacy-and-security.md
+packages/analytics/api-schemas.ts
+packages/analytics/connectors.ts
+packages/analytics/csv.ts
+packages/analytics/detail.ts
+packages/analytics/import-service.ts
+packages/analytics/json-analytics-store.ts
+packages/analytics/migrations/002_analytics_connectors.sql
+packages/analytics/opportunities.ts
+packages/analytics/report.ts
+packages/analytics/schemas.ts
+packages/analytics/sqlite-analytics-store.ts
+packages/analytics/sqlite-migration.ts
+packages/analytics/store-utils.ts
+packages/analytics/types.ts
+packages/analytics/validation.ts
+tests/analytics/api.test.ts
+tests/analytics/import.test.ts
+tests/analytics/storage.test.ts
+```
+
+### Release 1 files modified
+
+```text
+README.md
+apps/web/public/app.js
+apps/web/public/index.html
+apps/web/public/styles.css
+docs/api.md
+docs/architecture.md
+docs/build-journal.md
+docs/change-report.md
+docs/decision-log.md
+docs/demo-guide.md
+docs/deployment.md
+docs/file-map.md
+docs/methodology.md
+docs/storage.md
+services/analyzer/app.ts
+tests/analyzer/frontend-history.test.ts
+```
+
+### Release 1 commits
+
+```text
+25445cf feat: add analytics connector storage foundation
+a1825aa feat: add validated analytics CSV imports
+819e99e feat: expose project scoped growth analytics APIs
+3f9b00e feat: add growth intelligence workspace
+811ad7b fix: harden growth workspace browser behavior
+```
+
+The documentation commit containing this report follows those feature/fix commits.
+
+### Release 1 limitations and future edit locations
+
+- CSV only; future reviewed provider/OAuth definitions begin in `packages/analytics/connectors.ts` and must emit `packages/analytics/types.ts` contracts through the same validation/store boundary.
+- Normalization and mapping changes belong in `packages/analytics/csv.ts` and `import-service.ts`; increment `TRANSFORMATION_VERSION` for semantic changes.
+- Rule/threshold/version changes belong only in `packages/analytics/opportunities.ts` plus `docs/opportunity-model.md` and deterministic tests.
+- Search page/competitor matching belongs in `packages/analytics/detail.ts`; do not infer absent evidence.
+- SQLite schema changes require a new additive migration beside `packages/analytics/migrations/002_analytics_connectors.sql`; do not edit an applied migration.
+- Browser Search Performance/backlog behavior is in `apps/web/public/app.js`; HTTP contracts remain in `packages/analytics/api-schemas.ts` and `services/analyzer/app.ts`.
+- No currency, attribution window, consent state, sampling/privacy threshold, instrumentation quality, or provider aggregation semantics are independently known.
+- Opportunities generated for one import do not aggregate evidence across separate imports. Workflow status is preserved on deterministic opportunity reappearance.
+- Import deletion retains now-unlinked opportunities and audit history by design.
+- Migration 002 has not been applied to the current persistent local or deployed database. Separate approval, backup, and migration verification are required.
+- Live OAuth/provider access remains unstarted and requires separate approval.
+
+### Release 1 verification
+
+- Automated pre-documentation gate: 31 test files, 183 tests passed.
+- TypeScript: `npm run build` passed.
+- Browser JavaScript: `node --check apps/web/public/app.js` passed.
+- Whitespace: `git diff --check` passed.
+- Interactive disposable-data browser pass: Data Sources, Imports, Data Explorer, filtered Search Performance, eight-part evidence detail, backlog workflow, and export links passed.
+- Responsive browser pass: document/body width equaled the 375 px viewport after the scoped fix; analytics panels did not overflow, while the tab strip remained intentionally horizontally scrollable.
+- Browser console: zero warnings/errors after the final reload.
+- Final post-documentation gate is recorded in the completion response and final Git history.
 
 ## Original comparison persistence root cause
 
