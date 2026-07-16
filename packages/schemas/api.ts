@@ -105,6 +105,10 @@ export const visibilityObservationListQuerySchema = z.strictObject({
   targetUrl: urlInput.optional()
 });
 
+export const reportExportQuerySchema = z.strictObject({
+  format: z.enum(["json", "markdown", "csv"])
+});
+
 export type AnalyzeRequest = z.infer<typeof analyzeRequestSchema>;
 export type CompareRequest = z.infer<typeof compareRequestSchema>;
 export type CrawlProjectRequest = z.infer<typeof crawlProjectRequestSchema>;

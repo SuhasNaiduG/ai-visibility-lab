@@ -327,6 +327,30 @@ describe("analyzer API", () => {
     expect(providers.body).toEqual({ manualEntryEnabled: true, providers: [] });
   });
 
+  it("exports complete saved-run reports as JSON, Markdown, and CSV", async () => {
+    const saved = runRecord();
+    store.records = [saved];
+    const visibilityStore = {
+      save: vi.fn(),
+      list: vi.fn(async () => [])
+    };
+    const exportApp = createApp({ runStore: store, visibilityStore: visibilityStore as never });
+    const json = await request(exportApp).get("/api/runs/run-1/export?format=json");
+    const markdown = await request(exportApp).get("/api/runs/run-1/export?format=markdown");
+    const csv = await request(exportApp).get("/api/runs/run-1/export?format=csv");
+
+    expect(json.status).toBe(200);
+    expect(json.headers["content-disposition"]).toContain("ai-visibility-run-1.json");
+    expect(json.body).toEqual(expect.objectContaining({ reportVersion: "1.0.0", target: saved.targetUrl }));
+    expect(markdown.status).toBe(200);
+    expect(markdown.text).toMatch(/AI Visibility Research Report|Methodology|Limitations/u);
+    expect(csv.status).toBe(200);
+    expect(csv.text).toMatch(/comparison-metric|research-source/u);
+
+    const unsupported = await request(exportApp).get("/api/runs/run-1/export?format=pdf");
+    expect(unsupported.status).toBe(400);
+  });
+
   it("distinguishes a completed comparison save failure from a history loading failure", async () => {
     compareAndSave.mockRejectedValue(new RunStoreError("INVALID_RECORD", "Record validation failed", {
       issues: [{ path: ["history", "contentCountChanges", 0], received: "rejected value" }]

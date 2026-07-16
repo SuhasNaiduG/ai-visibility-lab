@@ -14,6 +14,7 @@ import {
   crawlProjectRequestSchema,
   latestRunQuerySchema,
   manualVisibilityObservationRequestSchema,
+  reportExportQuerySchema,
   visibilityObservationListQuerySchema
 } from "../../packages/schemas/api.js";
 import {
@@ -39,6 +40,7 @@ import type { AiInterpretationConfig, AiInterpretationProvider } from "../../pac
 import { JsonVisibilityObservationStore, VisibilityObservationStoreError } from "../../packages/visibility/json-observation-store.js";
 import type { VisibilityObservationStore } from "../../packages/visibility/types.js";
 import { SqliteRunStore } from "../../packages/storage/sqlite-run-store.js";
+import { buildCompleteResearchReport, researchReportCsv, researchReportJson, researchReportMarkdown } from "../../packages/reports/report.js";
 
 export interface AppDependencies {
   analyze: (url: string) => Promise<AnalysisResult>;
@@ -147,6 +149,22 @@ export function createApp(overrides: Partial<AppDependencies> = {}): Express {
     const validation = visibilityObservationListQuerySchema.safeParse({ targetUrl: request.query.targetUrl });
     if (!validation.success) throw validationError(validation.error.flatten());
     response.status(200).json(await visibilityStore.list(validation.data.targetUrl));
+  }));
+
+  app.get("/api/runs/:id/export", asyncHandler(async (request, response) => {
+    const rawId = request.params.id;
+    const id = Array.isArray(rawId) ? "" : rawId?.trim();
+    if (!id || id.length > 200) throw validationError({ fieldErrors: { id: ["A valid run ID is required"] } });
+    const validation = reportExportQuerySchema.safeParse({ format: request.query.format });
+    if (!validation.success) throw validationError(validation.error.flatten());
+    const run = await runStore.get(id);
+    if (!run) throw new ApiError(404, "RUN_NOT_FOUND", "Saved run was not found", { id });
+    const report = buildCompleteResearchReport(run, await visibilityStore.list(run.targetUrl));
+    const extension = validation.data.format === "markdown" ? "md" : validation.data.format;
+    response.setHeader("Content-Disposition", `attachment; filename="ai-visibility-${id}.${extension}"`);
+    if (validation.data.format === "json") response.type("application/json").send(researchReportJson(report));
+    else if (validation.data.format === "markdown") response.type("text/markdown").send(researchReportMarkdown(report));
+    else response.type("text/csv").send(researchReportCsv(report));
   }));
 
   app.get("/api/runs", asyncHandler(async (_request, response) => {

@@ -103,6 +103,9 @@ td { max-width: 340px; overflow-wrap: anywhere; }
 .crawl-page.crawl-skipped { border-left: 4px solid var(--warn); background: #fffaf1; }
 .source-card h3 a { color: var(--accent); }
 .source-card p { overflow-wrap: anywhere; }
+.export-links { display: flex; flex-wrap: wrap; gap: 10px; }
+.export-links a { display: inline-flex; min-height: 42px; align-items: center; padding: 9px 14px; border: 1px solid var(--accent); border-radius: 8px; color: var(--accent); font-weight: 800; text-decoration: none; }
+.export-links a:hover, .export-links a:focus { background: var(--accent-soft); }
 .finding, .gap, .history-item { padding: 14px; border: 1px solid var(--line); border-left: 4px solid var(--warn); border-radius: 8px; background: #fffdf8; }
 .finding.high, .gap.high { border-left-color: var(--danger); }
 .finding.low, .gap.low { border-left-color: #5f8274; }

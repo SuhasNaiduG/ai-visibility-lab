@@ -488,6 +488,17 @@ function renderOptionalAiInterpretation(run) {
   ]);
 }
 
+function renderReportExports(run) {
+  return element("div", { className: "export-links" }, [
+    ["JSON", "json"],
+    ["Markdown", "markdown"],
+    ["CSV", "csv"]
+  ].map(([label, format]) => element("a", {
+    text: `Export ${label}`,
+    attributes: { href: `/api/runs/${encodeURIComponent(run.id)}/export?format=${format}` }
+  })));
+}
+
 function analysisForSite(run, entry) {
   const analyses = run.analyses ?? [];
   const direct = analyses[entry.site.inputOrder];
@@ -703,6 +714,7 @@ function renderComparison(run, container) {
   container.append(section("Implementation workspace", renderImplementationWorkspace(comparison.implementationArtifacts ?? []), { className: "implementation-section" }));
   container.append(section("Fixture verification", renderFixtureVerification(), { className: "verification-section" }));
   if (run.verification) container.append(section("Later-run verification", renderRunVerification(run.verification), { className: "verification-section" }));
+  if (run.id) container.append(section("Complete report exports", [renderReportExports(run), element("p", { text: "JSON, Markdown, and CSV preserve the evidence and limitations. PDF is deferred and does not block the deterministic core." })]));
   if (run.id) container.append(section("Optional evidence-grounded AI interpretation", renderOptionalAiInterpretation(run)));
   if (run.history) container.append(section("Changes since the prior matching run", [
     metricCards([["Technical", run.history.technicalChanges?.length ?? 0], ["Metadata", run.history.metadataChanges?.length ?? 0], ["Schema", run.history.schemaChanges?.length ?? 0], ["Headings", run.history.headingChanges?.length ?? 0], ["Content", run.history.contentCountChanges?.length ?? 0], ["Links/media", run.history.linkAndMediaChanges?.length ?? 0]]),
