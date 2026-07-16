@@ -394,33 +394,25 @@ function renderAdvantages(advantages = [], siteEntries = [], definitions = new M
   return list;
 }
 
-function renderImplementationWorkspace(gaps = []) {
-  const selected = gaps[0];
-  if (!selected) {
-    return element("p", { className: "empty", text: "Run a comparison with an eligible benchmark to select an evidence-backed implementation proposal." });
+function renderImplementationWorkspace(artifacts = []) {
+  if (!artifacts.length) {
+    return element("p", { className: "empty", text: "No evidence-backed implementation proposals were generated for this comparison." });
   }
-
-  const proposal = [
-    "Proposal — requires factual and medical review before publication.",
-    selected.implementationDirection,
-    "Do not copy competitor wording or publish this template until the practice confirms every factual statement."
-  ].join(" ");
-  const artifact = selected.metric === "questionCount" || selected.metric === "detectedQuestions"
-    ? `<section aria-labelledby="faq-heading">\n  <h2 id="faq-heading">Frequently asked questions</h2>\n  <h3>[Question confirmed by the practice as a real patient need]</h3>\n  <p>[Clinically reviewed, factually accurate answer that matches services actually offered.]</p>\n</section>`
-    : `<section>\n  <h2>[Reviewed page section]</h2>\n  <p>[Factually verified content that addresses the observed gap.]</p>\n</section>`;
-
-  return element("div", { className: "implementation-workspace" }, [
-    element("p", { className: "proposal-label", text: "Proposal — requires factual and medical review before publication." }),
-    labelled("Selected evidence-backed gap", `${selected.gapId}: ${selected.whatDiffers}`),
-    labelled("Current evidence", selected.targetEvidence?.[0]?.snippet ?? selected.targetEvidence?.[0]?.observedValue),
-    labelled("Implementation direction", proposal),
-    element("div", { className: "artifact" }, [element("strong", { text: "Exact editable artifact" }), element("pre", { text: artifact })]),
-    element("ul", { className: "plain-list" }, [
-      element("li", { text: "Confirm the question reflects real user need and the answer matches actual services." }),
-      element("li", { text: "Publish only after factual and medical review where applicable." }),
-      element("li", { text: selected.verificationMethod })
-    ])
-  ]);
+  const workspace = element("div", { className: "implementation-workspace" });
+  for (const artifact of artifacts) {
+    workspace.append(element("article", { className: "artifact proposal-artifact" }, [
+      element("p", { className: "proposal-label", text: artifact.label ?? "Proposal — requires factual and professional review before publication." }),
+      element("div", { className: "tags" }, [artifact.artifactId, artifact.artifactType, artifact.status].filter(Boolean).map((tag) => element("span", { className: "tag", text: tag }))),
+      labelled("Source finding", `${artifact.sourceFinding?.ruleId}: ${artifact.sourceFinding?.metric}`),
+      jsonDetails(artifact.evidence ?? [], "Source evidence"),
+      element("div", { className: "artifact" }, [element("strong", { text: "Proposed artifact" }), element("pre", { text: artifact.proposedArtifact })]),
+      labelled("Assumptions", artifact.assumptions),
+      labelled("Facts requiring confirmation", artifact.factsToConfirm),
+      labelled("Review requirement", artifact.reviewRequirement),
+      element("div", {}, [element("strong", { text: "Verification steps" }), element("ol", { className: "plain-list" }, (artifact.verificationSteps ?? []).map((step) => element("li", { text: step })))])
+    ]));
+  }
+  return workspace;
 }
 
 function renderFixtureVerification() {
@@ -647,7 +639,7 @@ function renderComparison(run, container) {
         ]),
     conclusionsUnavailable ? { className: "conclusion-section is-disabled", attributes: { "aria-disabled": "true" } } : { className: "conclusion-section" }
   ));
-  container.append(section("Implementation workspace", renderImplementationWorkspace(comparison.targetGaps), { className: "implementation-section" }));
+  container.append(section("Implementation workspace", renderImplementationWorkspace(comparison.implementationArtifacts ?? []), { className: "implementation-section" }));
   container.append(section("Fixture verification", renderFixtureVerification(), { className: "verification-section" }));
   if (run.history) container.append(section("Changes since the prior matching run", [
     metricCards([["Technical", run.history.technicalChanges?.length ?? 0], ["Metadata", run.history.metadataChanges?.length ?? 0], ["Schema", run.history.schemaChanges?.length ?? 0], ["Headings", run.history.headingChanges?.length ?? 0], ["Content", run.history.contentCountChanges?.length ?? 0], ["Links/media", run.history.linkAndMediaChanges?.length ?? 0]]),

@@ -1,4 +1,5 @@
 import type { Evidence, Finding, Effort, Priority } from "../rules/types.js";
+import type { ImplementationArtifact } from "../proposals/types.js";
 
 export interface CoverageSignal {
   kind: string;
@@ -301,6 +302,7 @@ export interface ComparisonResult {
   targetAdvantages: TargetAdvantage[];
   competitorAdvantages: ComparisonGap[];
   sharedGaps: ComparisonGap[];
+  implementationArtifacts: ImplementationArtifact[];
   competitorOnlySchemaTypes: string[];
   competitorOnlyTopics: string[];
   competitorOnlyQuestions: string[];

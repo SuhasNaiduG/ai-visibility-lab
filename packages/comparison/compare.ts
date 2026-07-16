@@ -1,4 +1,5 @@
 import type { Evidence } from "../rules/types.js";
+import { generateImplementationArtifacts } from "../proposals/generate.js";
 import {
   classifyComparisonEligibility,
   COMPARISON_INCOMPLETE_MESSAGE
@@ -186,6 +187,7 @@ export function compareAnalyses(input: ComparisonInput): ComparisonResult {
   const sharedGaps = conclusionStatus === "unavailable"
     ? []
     : createSharedGaps(input.target, benchmarkCompetitors, benchmarkSites, targetRow, benchmarkRows);
+  const implementationArtifacts = generateImplementationArtifacts({ targetGaps });
 
   return {
     targetUrl: input.target.normalizedUrl,
@@ -201,6 +203,7 @@ export function compareAnalyses(input: ComparisonInput): ComparisonResult {
     targetAdvantages,
     competitorAdvantages: targetGaps.map((gap) => ({ ...gap })),
     sharedGaps,
+    implementationArtifacts,
     competitorOnlySchemaTypes,
     competitorOnlyTopics,
     competitorOnlyQuestions,

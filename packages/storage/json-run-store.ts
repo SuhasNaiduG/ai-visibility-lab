@@ -13,6 +13,7 @@ import type {
   ComparisonEligibility,
   ComparisonSite
 } from "../comparison/types.js";
+import { PROPOSAL_REVIEW_LABEL } from "../proposals/types.js";
 import {
   APPLICATION_VERSION,
   STORAGE_SCHEMA_VERSION,
@@ -318,6 +319,38 @@ const legacyTargetAdvantageSchema = targetAdvantageSchema.extend({
   competitorEvidence: z.array(legacyCompetitorEvidenceSchema)
 });
 
+const implementationArtifactSchema = z.strictObject({
+  artifactId: z.string().min(1),
+  artifactVersion: z.string().min(1),
+  artifactType: z.enum([
+    "title",
+    "meta-description",
+    "canonical",
+    "heading-structure",
+    "visible-faq-and-jsonld",
+    "structured-data",
+    "provider-or-reviewer-block",
+    "references-and-risk-section",
+    "trust-or-contact-block",
+    "internal-links",
+    "page-brief",
+    "comparison-table",
+    "image-alt-guidance"
+  ]),
+  status: z.literal("proposal"),
+  label: z.literal(PROPOSAL_REVIEW_LABEL),
+  sourceFinding: z.strictObject({
+    ruleId: z.string().min(1),
+    metric: z.string().min(1)
+  }),
+  evidence: z.array(evidenceSchema).min(1),
+  proposedArtifact: z.string().min(1),
+  assumptions: z.array(z.string().min(1)).min(1),
+  factsToConfirm: z.array(z.string().min(1)).min(1),
+  reviewRequirement: z.string().min(1),
+  verificationSteps: z.array(z.string().min(1)).min(1)
+});
+
 const comparisonSchema = z.looseObject({
   targetUrl: httpUrlSchema,
   competitorUrls: z.array(httpUrlSchema).min(1).max(5),
@@ -332,6 +365,7 @@ const comparisonSchema = z.looseObject({
   targetAdvantages: z.array(targetAdvantageSchema),
   competitorAdvantages: z.array(comparisonGapSchema),
   sharedGaps: z.array(comparisonGapSchema),
+  implementationArtifacts: z.array(implementationArtifactSchema),
   competitorOnlySchemaTypes: z.array(z.string()),
   competitorOnlyTopics: z.array(z.string()),
   competitorOnlyQuestions: z.array(z.string()),
@@ -347,7 +381,8 @@ const legacyComparisonSchema = comparisonSchema.extend({
   targetGaps: z.array(legacyComparisonGapSchema),
   targetAdvantages: z.array(legacyTargetAdvantageSchema),
   competitorAdvantages: z.array(legacyComparisonGapSchema).optional(),
-  sharedGaps: z.array(legacyComparisonGapSchema).optional()
+  sharedGaps: z.array(legacyComparisonGapSchema).optional(),
+  implementationArtifacts: z.array(implementationArtifactSchema).optional()
 });
 
 const observedChangeSchema = z.looseObject({
@@ -765,6 +800,7 @@ function missesCurrentComparisonContract(run: LegacyRunRecord): boolean {
     || !hasOwn(comparison, "excludedCompetitorUrls")
     || !hasOwn(comparison, "competitorAdvantages")
     || !hasOwn(comparison, "sharedGaps")
+    || !hasOwn(comparison, "implementationArtifacts")
     || !comparison.sites
   ) return true;
   if (comparison.sites.some((site) => !hasOwn(site, "eligibility"))) return true;
@@ -922,6 +958,7 @@ function recordAlignmentIssues(run: RunRecord, previousRun?: RunRecord, requireP
     || run.comparison.targetAdvantages.length > 0
     || run.comparison.competitorAdvantages.length > 0
     || run.comparison.sharedGaps.length > 0
+    || run.comparison.implementationArtifacts.length > 0
     || run.comparison.competitorOnlySchemaTypes.length > 0
     || run.comparison.competitorOnlyTopics.length > 0
     || run.comparison.competitorOnlyQuestions.length > 0
@@ -940,6 +977,18 @@ function recordAlignmentIssues(run: RunRecord, previousRun?: RunRecord, requireP
     }
     for (const gap of run.comparison.sharedGaps) {
       issues.push(...comparisonEvidenceIssues(gap, targetSite, usableCompetitors, `shared gap ${gap.gapId}`));
+    }
+    const gapsByRule = new Map(run.comparison.targetGaps.map((gap) => [gap.ruleId, gap]));
+    for (const artifact of run.comparison.implementationArtifacts) {
+      const sourceGap = gapsByRule.get(artifact.sourceFinding.ruleId);
+      if (!sourceGap) {
+        issues.push(`proposal ${artifact.artifactId} references an unknown target gap`);
+      } else {
+        if (artifact.sourceFinding.metric !== sourceGap.metric) issues.push(`proposal ${artifact.artifactId} metric does not match its source gap`);
+        if (!equalJson(evidenceSemantics(artifact.evidence), evidenceSemantics(sourceGap.targetEvidence))) {
+          issues.push(`proposal ${artifact.artifactId} evidence does not match its source gap`);
+        }
+      }
     }
   }
   issues.push(...comparisonSemanticIssues(run));
@@ -1178,6 +1227,7 @@ function comparisonSemanticIssues(run: RunRecord): string[] {
   if (!equalJson(run.comparison.competitorOnlySchemaTypes, expected.competitorOnlySchemaTypes)) issues.push("competitor-only schema conclusions do not match analyzed evidence");
   if (!equalJson(run.comparison.competitorOnlyTopics, expected.competitorOnlyTopics)) issues.push("competitor-only topic conclusions do not match analyzed evidence");
   if (!equalJson(run.comparison.competitorOnlyQuestions, expected.competitorOnlyQuestions)) issues.push("competitor-only question conclusions do not match analyzed evidence");
+  if (!equalJson(run.comparison.implementationArtifacts, expected.implementationArtifacts)) issues.push("stored implementation artifacts do not match deterministic proposals");
   return issues;
 }
 
