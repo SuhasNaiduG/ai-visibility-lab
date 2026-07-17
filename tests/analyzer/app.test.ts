@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CrawlerError } from "../../packages/crawler/errors.js";
 import { parsePage } from "../../packages/parser/page.js";
 import { JsonRunStore, RunStoreError } from "../../packages/storage/json-run-store.js";
+import { SqliteRunStore } from "../../packages/storage/sqlite-run-store.js";
 import type { RunRecord, RunStore } from "../../packages/storage/types.js";
 import { createApp } from "../../services/analyzer/app.js";
 import type { AnalysisResult } from "../../services/analyzer/analyze.js";
@@ -13,6 +14,8 @@ import type { CompareRunInput } from "../../services/analyzer/compare.js";
 import { makeAnalysis, makeComparison } from "../helpers/analysis.js";
 import type { AiInterpretationConfig, AiInterpretationProvider } from "../../packages/ai/types.js";
 import { JsonVisibilityObservationStore } from "../../packages/visibility/json-observation-store.js";
+import { SqliteAnalyticsStore } from "../../packages/analytics/sqlite-analytics-store.js";
+import type { CrawlResearchProject } from "../../packages/crawler/site-crawl.js";
 
 const pageUrl = "https://example.com/";
 const parsed = parsePage(`<!doctype html><html lang="en"><head>
@@ -64,6 +67,30 @@ const analysisResult: AnalysisResult = {
   rawEvidence: [],
   analyzerResults: { libraryVersion: "1.0.0", observations: [] }
 };
+
+function crawlProject(projectId = "project-1"): CrawlResearchProject {
+  return {
+    projectId,
+    createdAt: "2026-07-17T00:00:00.000Z",
+    targetUrl: "https://example.com/",
+    origin: "https://example.com",
+    config: { maxPages: 5, maxDepth: 1, minimumDelayMs: 0 },
+    status: "complete",
+    truncated: false,
+    pages: [],
+    aggregate: {
+      analyzedPages: 0,
+      blockedPages: 0,
+      skippedPages: 0,
+      errorPages: 0,
+      totalWords: 0,
+      uniqueSchemaTypes: [],
+      uniqueTopicTerms: [],
+      findingCounts: []
+    },
+    limitations: []
+  };
+}
 
 function runRecord(): RunRecord {
   const target = makeAnalysis("https://target.example/");
@@ -153,8 +180,9 @@ describe("analyzer API", () => {
   });
 
   it("validates and returns a bounded crawl research project", async () => {
-    const crawl = vi.fn(async () => ({ projectId: "project-1", status: "complete", pages: [] }));
-    const projectApp = createApp({ crawl: crawl as never });
+    const project = crawlProject();
+    const crawl = vi.fn(async () => project);
+    const projectApp = createApp({ crawl });
     const response = await request(projectApp).post("/api/projects/crawl").send({
       targetUrl: "https://example.com",
       maxPages: 5,
@@ -162,11 +190,44 @@ describe("analyzer API", () => {
       minimumDelayMs: 0
     });
     expect(response.status).toBe(200);
-    expect(response.body).toEqual({ projectId: "project-1", status: "complete", pages: [] });
+    expect(response.body).toEqual(project);
     expect(crawl).toHaveBeenCalledWith({ targetUrl: "https://example.com", maxPages: 5, maxDepth: 1, minimumDelayMs: 0 });
 
     const invalid = await request(projectApp).post("/api/projects/crawl").send({ targetUrl: "https://example.com", maxPages: 51 });
     expect(invalid.status).toBe(400);
+  });
+
+  it("archives and registers a complete crawl project with strict SQLite stores", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "ai-visibility-api-crawl-sqlite-"));
+    const databasePath = join(directory, "research.sqlite");
+    const runStore = new SqliteRunStore(databasePath);
+    const analyticsStore = new SqliteAnalyticsStore(databasePath);
+    const project = crawlProject("project-sqlite-1");
+
+    try {
+      const response = await request(createApp({
+        crawl: vi.fn(async () => project),
+        runStore,
+        analyticsStore
+      })).post("/api/projects/crawl").send({
+        targetUrl: "https://example.com",
+        maxPages: 5,
+        maxDepth: 1,
+        minimumDelayMs: 0
+      });
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual(project);
+      expect(await analyticsStore.getProject(project.projectId)).toEqual({
+        projectId: project.projectId,
+        createdAt: project.createdAt,
+        targetUrl: project.targetUrl,
+        status: project.status
+      });
+    } finally {
+      analyticsStore.close();
+      runStore.close();
+    }
   });
 
   it("maps an unsupported or unsafe URL to a client-safe error", async () => {

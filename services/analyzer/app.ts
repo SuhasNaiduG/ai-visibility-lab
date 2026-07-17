@@ -128,7 +128,7 @@ export function createApp(overrides: Partial<AppDependencies> = {}): Express {
     if (!validation.success) throw validationError(validation.error.flatten());
     const project = await crawl(validation.data);
     await runStore.saveCrawlProject?.(project);
-    if (isProjectReference(project)) await analyticsStore.registerProject(project);
+    await analyticsStore.registerProject(toProjectReference(project));
     response.status(200).json(project);
   }));
 
@@ -482,11 +482,13 @@ function isHttpStatusError(error: unknown, status: number): boolean {
   return error instanceof Error && "status" in error && (error as Error & { status?: number }).status === status;
 }
 
-function isProjectReference(value: CrawlResearchProject): value is CrawlResearchProject & ProjectReference {
-  return typeof value.projectId === "string"
-    && typeof value.createdAt === "string"
-    && typeof value.targetUrl === "string"
-    && typeof value.status === "string";
+function toProjectReference(project: CrawlResearchProject): ProjectReference {
+  return {
+    projectId: project.projectId,
+    createdAt: project.createdAt,
+    targetUrl: project.targetUrl,
+    status: project.status
+  };
 }
 
 function queryObject(request: Request): Record<string, unknown> {
